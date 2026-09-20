@@ -2,10 +2,23 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.0.0";
+  var VERSION = "1.1.0";
   var STORE_KEY = "qoder_persian_rtl_config_v1";
   if (typeof window === "undefined" || typeof document === "undefined") return;
-  if (window.__QODER_RTL__ && window.__QODER_RTL__.version === VERSION) return;
+  var previous = window.__QODER_RTL__;
+  if (previous && previous.version === VERSION) return;
+  /* A newer payload replacing an older one in a live document has to undo it
+     first, or the panel and the keyboard handlers would be doubled. */
+  if (previous && typeof previous.dispose === "function") {
+    try {
+      previous.dispose();
+    } catch (e) {}
+  }
+
+  var teardown = [];
+  function addDisposable(fn) {
+    teardown.push(fn);
+  }
 
   var FA_RE = /[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]/g;
   var LATIN_RE = /[A-Za-zÀ-ɏ]/g;
@@ -90,6 +103,23 @@
 
   /* ------------------------------------------------------------------ apply */
 
+  function rootFlags() {
+    var on = !!cfg.rtl && cfg.mode !== "off";
+    return {
+      mode: on ? (cfg.mode === "force" ? "force" : "smart") : "off",
+      tables: on && !!cfg.tables,
+      reverse: on && !!cfg.reverseColumns
+    };
+  }
+
+  function setFlag(root, name, on) {
+    if (on) {
+      if (!root.hasAttribute(name)) root.setAttribute(name, "1");
+    } else if (root.hasAttribute(name)) {
+      root.removeAttribute(name);
+    }
+  }
+
   function applyConfig() {
     var root = document.documentElement;
     var style = document.getElementById("qoder-rtl-vars");
@@ -111,13 +141,28 @@
       "--qrt-stack:" + fontStack('"Segoe UI",Tahoma,"Iranian Sans",sans-serif') + ";" +
       "}";
 
-    var on = !!cfg.rtl && cfg.mode !== "off";
-    root.classList.toggle("qrt-off", !on);
-    root.classList.toggle("qrt-smart", on && cfg.mode === "smart");
-    root.classList.toggle("qrt-force", on && cfg.mode === "force");
-    root.classList.toggle("qrt-tables", on && !!cfg.tables);
-    root.classList.toggle("qrt-reverse", on && !!cfg.reverseColumns);
-    root.classList.toggle("qrt-panel-on", !!cfg.panel);
+    var f = rootFlags();
+    /* Attributes are the source of truth for the CSS; Qoder's renderer rewrites
+       <html class="…">, so the mirrored classes below are debug output only. */
+    if (root.getAttribute("data-qrt-mode") !== f.mode) root.setAttribute("data-qrt-mode", f.mode);
+    setFlag(root, "data-qrt-tables", f.tables);
+    setFlag(root, "data-qrt-reverse", f.reverse);
+    root.classList.toggle("qrt-off", f.mode === "off");
+    root.classList.toggle("qrt-smart", f.mode === "smart");
+    root.classList.toggle("qrt-force", f.mode === "force");
+    root.classList.toggle("qrt-tables", f.tables);
+    root.classList.toggle("qrt-reverse", f.reverse);
+  }
+
+  /* Cheap drift check for the MutationObserver / safety-net interval. */
+  function rootStateDrifted() {
+    var root = document.documentElement;
+    var f = rootFlags();
+    return (
+      root.getAttribute("data-qrt-mode") !== f.mode ||
+      root.hasAttribute("data-qrt-tables") !== f.tables ||
+      root.hasAttribute("data-qrt-reverse") !== f.reverse
+    );
   }
 
   /* ---------------------------------------------------------------- bidi walk */
@@ -180,32 +225,44 @@
   }
 
   function installAtFix() {
-    document.addEventListener(
-      "keydown",
-      function (ev) {
-        if (!cfg.fixAtSign || ev.key !== "٬") return;
-        var t = ev.target;
-        if (!t || !t.closest || !t.closest("[data-chat-composer]")) return;
-        ev.preventDefault();
-        ev.stopPropagation();
-        insertText(t, "@");
-      },
-      true
-    );
+    var handler = function (ev) {
+      if (!cfg.fixAtSign || ev.key !== "٬") return;
+      var t = ev.target;
+      if (!t || !t.closest || !t.closest("[data-chat-composer]")) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      insertText(t, "@");
+    };
+    document.addEventListener("keydown", handler, true);
+    addDisposable(function () {
+      document.removeEventListener("keydown", handler, true);
+    });
   }
 
   /* --------------------------------------------------------------- shortcuts */
 
-  document.addEventListener("keydown", function (ev) {
+  var onGlobalKey = function (ev) {
     if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.code !== "KeyR") return;
     var t = ev.target;
     if (t && t.closest && t.closest(".qrt-widget")) return;
     ev.preventDefault();
-    cfg.rtl = !cfg.rtl;
-    if (cfg.rtl && cfg.mode === "off") cfg.mode = "smart";
+    /* Alt+Shift+R brings the widget back after "پنهان کردن پنل", which otherwise
+       is only stored in localStorage and unreachable from the UI. */
+    if (ev.shiftKey) {
+      cfg.panel = !cfg.panel;
+    } else {
+      cfg.rtl = !cfg.rtl;
+      if (cfg.rtl && cfg.mode === "off") cfg.mode = "smart";
+      markBlocks();
+    }
     save();
     applyConfig();
-    markBlocks();
+    mount();
+    syncInputs();
+  };
+  document.addEventListener("keydown", onGlobalKey);
+  addDisposable(function () {
+    document.removeEventListener("keydown", onGlobalKey);
   });
 
   /* ------------------------------------------------------------- settings UI */
@@ -322,7 +379,7 @@
   function buildPanel() {
     var trigger = el("button", "qrt-trigger", "ا");
     trigger.type = "button";
-    trigger.title = "تنظیمات فارسی / RTL — Alt+R";
+    trigger.title = "تنظیمات فارسی / RTL — Alt+R برای جهت، Alt+Shift+R برای نمایش/پنهان‌کردن این پنل";
     trigger.addEventListener("click", function () {
       setOpen(!open);
     });
@@ -397,7 +454,9 @@
       return;
     }
     if (!shell) shell = buildPanel();
-    if (!shell.parentNode) document.body.appendChild(shell);
+    /* contains() rather than parentNode: the widget can sit in a subtree that the
+       app detached from the document, where parentNode is still set. */
+    if (!document.body.contains(shell)) document.body.appendChild(shell);
     syncInputs();
   }
 
@@ -434,33 +493,63 @@
     ".qrt-footer{display:flex;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(127,127,127,.22);}",
     ".qrt-footbtn{flex:1 1 auto;border:1px solid rgba(127,127,127,.26);background:rgba(127,127,127,.08);color:inherit;",
     "font:500 11px/1 var(--qrt-stack);padding:6px 8px;border-radius:8px;cursor:pointer;}",
-    ".qrt-footbtn:hover{background:rgba(127,127,127,.16);}",
-    "html:not(.qrt-panel-on) .qrt-widget{display:none;}"
+    ".qrt-footbtn:hover{background:rgba(127,127,127,.16);}"
   ].join("");
 
   /* --------------------------------------------------------------------- boot */
 
+  function ensurePanelStyle() {
+    if (document.getElementById("qoder-rtl-panel-style")) return;
+    var st = document.createElement("style");
+    st.id = "qoder-rtl-panel-style";
+    st.textContent = panelCss;
+    (document.head || document.documentElement).appendChild(st);
+  }
+
   function boot() {
-    if (!document.getElementById("qoder-rtl-panel-style")) {
-      var st = document.createElement("style");
-      st.id = "qoder-rtl-panel-style";
-      st.textContent = panelCss;
-      (document.head || document.documentElement).appendChild(st);
-    }
+    ensurePanelStyle();
     applyConfig();
     installAtFix();
     mount();
     markBlocks();
 
-    new MutationObserver(function () {
+    var observer = new MutationObserver(function () {
+      if (rootStateDrifted()) applyConfig();
       if (cfg.panel && !shell) mount();
       scheduleMark();
-    }).observe(document.documentElement, { childList: true, subtree: true });
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    addDisposable(function () {
+      observer.disconnect();
+    });
 
-    setInterval(function () {
-      if (cfg.panel && (!shell || !shell.parentNode)) mount();
+    var tick = setInterval(function () {
+      if (rootStateDrifted()) applyConfig();
+      if (cfg.panel && (!shell || !document.body.contains(shell))) mount();
       scheduleMark();
     }, 4000);
+    addDisposable(function () {
+      clearInterval(tick);
+    });
+  }
+
+  var disposed = false;
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    for (var i = 0; i < teardown.length; i++) {
+      try {
+        teardown[i]();
+      } catch (e) {}
+    }
+    teardown.length = 0;
+    if (shell && shell.parentNode) shell.parentNode.removeChild(shell);
+    shell = null;
+    var transient = ["qoder-rtl-vars", "qoder-rtl-panel-style"];
+    for (var j = 0; j < transient.length; j++) {
+      var node = document.getElementById(transient[j]);
+      if (node && node.parentNode) node.parentNode.removeChild(node);
+    }
   }
 
   window.__QODER_RTL__ = {
@@ -472,7 +561,8 @@
       applyConfig();
       markBlocks();
       syncInputs();
-    }
+    },
+    dispose: dispose
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });

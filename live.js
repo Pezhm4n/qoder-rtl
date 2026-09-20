@@ -21,29 +21,32 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawn, execSync } = require("node:child_process");
 const { Connection, browserEndpoint, portIsOpen, httpJson } = require("./lib/cdp");
-const { runtimeSource, probeSource } = require("./lib/payload");
+const { runtimeSource, probeSource, diagnoseSource } = require("./lib/payload");
 const { findInstall } = require("./lib/detect");
 const { stateRoot } = require("./lib/backup");
 
 const DEFAULT_PORT = 9222;
 const DEFAULT_WAIT = 30;
-const HELP = `node live.js [--port 9222] [--wait 30] [--check] [--start] [--launcher] [--list] [-v]
+const HELP = `node live.js [--port 9222] [--wait 30] [--check] [--diagnose] [--start] [--launcher] [--list] [-v]
 
-  --check     inject, probe every window, append the result to
-              %LOCALAPPDATA%\\qoder-persian-rtl\\cdp-test.log, then exit
-  --start     start Qoder with --remote-debugging-port (quit it first: single instance)
-  --launcher  write Qoder-RTL.cmd next to live.js and in %LOCALAPPDATA%\\qoder-persian-rtl
-              (that .cmd starts Qoder with the port and runs this injector after it)
-  --wait <s>  seconds to wait for the DevTools port to appear (default ${DEFAULT_WAIT})
-  --list      show the page targets CDP can see`;
+  --check      inject, probe every window, append the result to
+               %LOCALAPPDATA%\\qoder-persian-rtl\\cdp-test.log, then exit
+  --diagnose   read-only: report what the live window actually computed (fonts,
+               computed font-family, panel state), no injection, cdp-diagnose.log
+  --start      start Qoder with --remote-debugging-port (quit it first: single instance)
+  --launcher   write Qoder-RTL.cmd next to live.js and in %LOCALAPPDATA%\\qoder-persian-rtl
+               (that .cmd starts Qoder with the port and runs this injector after it)
+  --wait <s>   seconds to wait for the DevTools port to appear (default ${DEFAULT_WAIT})
+  --list       show the page targets CDP can see`;
 
 function parseArgs(argv) {
-  const flags = { port: DEFAULT_PORT, wait: DEFAULT_WAIT, check: false, start: false, launcher: false, list: false, verbose: false, help: false };
+  const flags = { port: DEFAULT_PORT, wait: DEFAULT_WAIT, check: false, diagnose: false, start: false, launcher: false, list: false, verbose: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--port" || a === "-p") flags.port = Number(argv[++i]) || flags.port;
     else if (a === "--wait") flags.wait = Number(argv[++i]);
     else if (a === "--check") flags.check = true;
+    else if (a === "--diagnose") flags.diagnose = true;
     else if (a === "--start") flags.start = true;
     else if (a === "--launcher") flags.launcher = true;
     else if (a === "--list") flags.list = true;
@@ -149,41 +152,56 @@ class Injector {
       }
     });
     const { targetInfos } = await this.conn.send("Target.getTargets");
-    for (const info of targetInfos.filter((t) => t.type === "page" && t.subtype !== "devtools")) {
-      try {
-        const { sessionId } = await this.conn.send("Target.attachToTarget", { targetId: info.targetId, flatten: true });
-        await this.onAttach(sessionId, info);
-      } catch (e) {
-        say(this.flags, `  could not attach to ${info.targetId}: ${e.message}`);
-      }
-    }
+    const pages = targetInfos.filter((t) => t.type === "page" && t.subtype !== "devtools");
+    /* One unresponsive window (hidden splash, unrendered document) must not stall
+       the others, so the per-target work runs concurrently. */
+    await Promise.all(
+      pages.map(async (info) => {
+        try {
+          const { sessionId } = await this.conn.send("Target.attachToTarget", { targetId: info.targetId, flatten: true });
+          await this.onAttach(sessionId, info);
+        } catch (e) {
+          say(this.flags, `  could not attach to ${info.targetId}: ${e.message}`);
+        }
+      })
+    );
   }
 
   async onAttach(sessionId, info) {
     if (!info || info.type !== "page" || this.sessions.has(sessionId)) return;
-    this.sessions.set(sessionId, { targetId: info.targetId, url: info.url, patchedAt: null });
+    const meta = { targetId: info.targetId, url: info.url, patchedAt: null, patchError: null };
+    this.sessions.set(sessionId, meta);
     say(this.flags, `  page: ${info.title || "(untitled)"} — ${String(info.url).slice(0, 90)}`);
     try {
-      await this.conn.send("Page.enable", {}, sessionId);
+      await this.conn.send("Page.enable", {}, sessionId, 8000);
     } catch (e) {
       this.sessions.delete(sessionId);
       say(this.flags, `  skipped (no Page domain): ${e.message}`);
       return;
     }
     /* Runs on every later document before the page's own scripts, and CSP does not apply to it. */
-    await this.conn.send("Page.addScriptToEvaluateOnNewDocument", { source: this.source }, sessionId);
-    this.sessions.get(sessionId).patchedAt = await this.patchNow(sessionId);
+    try {
+      await this.conn.send("Page.addScriptToEvaluateOnNewDocument", { source: this.source }, sessionId, 8000);
+    } catch (e) {
+      meta.patchError = `addScriptToEvaluateOnNewDocument: ${e.message}`;
+      say(this.flags, `  ${meta.patchError}`);
+    }
+    meta.patchedAt = await this.patchNow(sessionId).catch((e) => {
+      meta.patchError = e.message;
+      return null;
+    });
   }
 
   async patchNow(sessionId) {
-    const res = await this.conn.send("Runtime.evaluate", { expression: this.source }, sessionId);
+    /* The payload carries ~150 KB of base64 font, so this call gets a longer budget. */
+    const res = await this.conn.send("Runtime.evaluate", { expression: this.source }, sessionId, 30000);
     const ex = res && res.exceptionDetails;
     if (ex) console.log(`  ! injected script threw: ${ex.exception?.description?.split("\n")[0] || ex.text}`);
     return ex ? null : new Date().toISOString();
   }
 
   async probe(sessionId) {
-    const res = await this.conn.send("Runtime.evaluate", { expression: probeSource(), returnByValue: true }, sessionId);
+    const res = await this.conn.send("Runtime.evaluate", { expression: probeSource(), returnByValue: true }, sessionId, 10000);
     if (res.exceptionDetails || typeof res.result?.value !== "string") {
       return { error: res.exceptionDetails?.text || (res.result && res.result.subtype) || "no probe result" };
     }
@@ -194,11 +212,21 @@ class Injector {
     }
   }
 
+  async diagnose(sessionId) {
+    const res = await this.conn.send("Runtime.evaluate", { expression: diagnoseSource(), returnByValue: true }, sessionId, 15000);
+    if (typeof res.result?.value !== "string") return { error: res.exceptionDetails?.text || "no diagnose result" };
+    try {
+      return JSON.parse(res.result.value);
+    } catch (e) {
+      return { error: "unparsable diagnose result" };
+    }
+  }
+
   async report() {
     const out = [];
     for (const [sessionId, meta] of this.sessions) {
       const p = await this.probe(sessionId).catch((e) => ({ error: e.message }));
-      out.push({ targetId: meta.targetId, url: meta.url, patchedAt: meta.patchedAt, ...p });
+      out.push({ targetId: meta.targetId, url: meta.url, patchedAt: meta.patchedAt, patchError: meta.patchError, ...p });
     }
     return out;
   }
@@ -206,64 +234,121 @@ class Injector {
 
 /* ---------- verdict ---------- */
 
+/* A probe that could not run (window destroyed, socket dropped) is unknown, not a failure. */
 function verdictRows(reports) {
-  const ok = (fn) => reports.some(fn);
+  const answered = reports.filter((r) => !r.error);
+  const ok = (fn) => answered.some(fn);
+  const unknown = answered.length === 0 && reports.length > 0;
+  const row = (name, pass, detail) => ({ name, pass: unknown ? null : pass, detail });
   return [
     { name: "page targets visible over CDP", pass: reports.length > 0, detail: `${reports.length} target(s)` },
+    { name: "probes answered", pass: !unknown && reports.length > 0, detail: unknown ? reports.map((r) => r.error).filter(Boolean).join(" / ") || "—" : `${answered.length}/${reports.length}` },
     {
       name: "payload injected (window.__QODER_RTL__)",
-      pass: ok((r) => !!r.rtlVersion),
-      detail: reports.map((r) => r.rtlVersion || r.error || "—").join(", ")
+      /* patchedAt comes from the injector itself, so it survives a lost probe. */
+      pass: ok((r) => !!r.rtlVersion) || reports.some((r) => r.patchedAt),
+      detail: reports.map((r) => r.rtlVersion || r.patchError || r.error || (r.patchedAt ? "injected, probe lost" : "—")).join(", ")
     },
-    { name: "stylesheet installed inline", pass: ok((r) => r.styleTag === true), detail: reports.map((r) => (r.styleTag ? "✓" : "✗")).join(" ") },
-    { name: "Vazirmatn data-URI font loads", pass: ok((r) => r.font === true), detail: reports.map((r) => String(r.font)).join(" ") },
-    {
-      name: "chat DOM hooks reachable",
-      pass: ok((r) => r.hooks && Object.values(r.hooks).some((n) => n > 0)),
-      detail: reports.map((r) => JSON.stringify(r.hooks || {})).join(" | ")
-    },
-    {
-      name: "patch active on the document root",
-      pass: ok((r) => r.applied && /qrt-smart|qrt-force/.test(r.applied.htmlClasses || "") && r.applied.vars > 0),
-      detail: reports.map((r) => `${(r.applied && r.applied.htmlClasses) || "—"} vars=${r.applied ? r.applied.vars : "?"} fa=${r.applied ? r.applied.faBlocks : "?"}`).join(" | ")
-    }
+    row("stylesheet installed inline", ok((r) => r.styleTag === true), answered.map((r) => (r.styleTag ? "✓" : "✗")).join(" ") || "—"),
+    row(
+      "Vazirmatn registered from inlined bytes",
+      ok((r) => /loaded|added|css-fallback|pending/.test(String(r.font && r.font.registered))),
+      answered.map((r) => `${(r.font && r.font.registered) || "never"} via ${(r.font && r.font.route) || "-"}${r.font && r.font.message ? ` (${r.font.message})` : ""}`).join(" | ") || "—"
+    ),
+    row(
+      "Vazirmatn resolves for page text",
+      ok((r) => r.font && r.font.usableByCss === true),
+      answered.map((r) => `check=${r.font ? r.font.usableByCss : "?"}`).join(" ") || "—"
+    ),
+    row(
+      "chat prose computes to the Vazirmatn stack",
+      ok((r) => r.applied && /^["']?Vazirmatn QRT/.test(r.applied.textFont || "")),
+      answered.map((r) => (r.applied && r.applied.textFont) || "no prose element").join(" | ") || "—"
+    ),
+    row(
+      "chat DOM hooks reachable",
+      ok((r) => r.hooks && Object.values(r.hooks).some((n) => n > 0)),
+      answered.map((r) => JSON.stringify(r.hooks || {})).join(" | ") || "—"
+    ),
+    row(
+      "patch active on the document root",
+      ok((r) => r.applied && /smart|force/.test(r.applied.mode || "") && r.applied.vars > 0),
+      answered.map((r) => `data-qrt-mode=${(r.applied && r.applied.mode) || "—"} vars=${r.applied ? r.applied.vars : "?"} fa=${r.applied ? r.applied.faBlocks : "?"} classes="${(r.applied && r.applied.htmlClasses) || ""}"`).join(" | ") || "—"
+    ),
+    row(
+      "settings panel mounted and visible",
+      ok((r) => r.applied && r.applied.panel > 0 && r.applied.panelVisible),
+      answered.map((r) => `nodes=${r.applied ? r.applied.panel : "?"} size=${(r.applied && r.applied.panelRect) || "none"}`).join(" | ") || "—"
+    )
   ];
 }
 
 function hintsFor(rows) {
   const hints = [];
-  const failed = rows.filter((r) => !r.pass).map((r) => r.name);
+  const failed = rows.filter((r) => r.pass === false).map((r) => r.name);
   if (failed.includes("chat DOM hooks reachable") && !failed.includes("payload injected (window.__QODER_RTL__)")) {
     hints.push("hooks=0 with the payload injected normally means that window has no conversation rendered — open a chat and re-run.");
   }
   if (failed.includes("patch active on the document root")) {
-    hints.push("if the root classes are missing, the config may be switched off: press Alt+R inside Qoder, or clear the qoder_persian_rtl_config_v1 key.");
+    hints.push("no data-qrt-mode on <html> means the config is switched off: press Alt+R inside Qoder, or clear the qoder_persian_rtl_config_v1 key.");
+  }
+  if (failed.includes("Vazirmatn resolves for page text")) {
+    hints.push("the face never became usable — run node live.js --diagnose and compare font.prelude with font.faces; a 'never' prelude status means the payload's first half did not execute.");
+  }
+  if (failed.includes("chat prose computes to the Vazirmatn stack") && !failed.includes("Vazirmatn resolves for page text")) {
+    hints.push("the font is loaded but Qoder's own font-family rule wins on the prose elements — node live.js --diagnose prints the computed stack per element, which selector needs !important.");
+  }
+  if (failed.includes("settings panel mounted and visible")) {
+    hints.push("nodes=0 → the widget was never mounted (check rtl.config.panel, or press Alt+Shift+R); nodes>0 with size=0x0 → something in the page hides or re-parents .qrt-widget.");
+  }
+  if (rows.some((r) => r.pass === null)) {
+    hints.push("UNKNOWN rows are windows whose probe never answered (hidden/destroyed target); the patch itself may still be applied.");
   }
   return hints;
 }
 
 function formatReport(reports, rows, port) {
+  const mark = (p) => (p === null ? "UNSURE" : p ? "PASS" : "FAIL");
   const lines = [`# port ${port} — ${new Date().toISOString()}`];
   if (!reports.length) lines.push("(no page targets attached)");
   for (const r of reports) {
     lines.push(
-      `- ${r.targetId}\n    url     ${r.url}\n    patched ${r.patchedAt || "n/a"}\n    version ${r.rtlVersion || r.error || "absent"}`,
-      `    css     style=${r.styleTag} font=${r.font}`,
+      `- ${r.targetId}\n    url     ${r.url}\n    patched ${r.patchedAt || "n/a"}${r.patchError ? " (error: " + r.patchError + ")" : ""}\n    version ${r.rtlVersion || r.error || "absent"}`,
+      `    css     style=${r.styleTag} font=${JSON.stringify(r.font || null)}`,
       `    hooks   ${JSON.stringify(r.hooks || {})}`,
       `    applied ${JSON.stringify(r.applied || {})}`
     );
   }
-  for (const row of rows) lines.push(`${row.pass ? "PASS" : "FAIL"}  ${row.name} (${row.detail})`);
+  for (const row of rows) lines.push(`${mark(row.pass)}  ${row.name} (${row.detail})`);
   for (const hint of hintsFor(rows)) lines.push(`note  ${hint}`);
   return lines.join("\n");
 }
 
-function writeVerdict(text) {
+function writeVerdict(text, name = "cdp-test.log") {
   const dir = stateRoot();
   fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, "cdp-test.log");
+  const file = path.join(dir, name);
   fs.appendFileSync(file, text + "\n\n", "utf8");
   return file;
+}
+
+/* Read-only pass over every page target, for answering "why does it look wrong". */
+async function runDiagnose(conn, flags) {
+  const injector = new Injector(conn, flags);
+  const { targetInfos } = await conn.send("Target.getTargets");
+  const rows = [];
+  for (const info of targetInfos.filter((t) => t.type === "page" && t.subtype !== "devtools")) {
+    const row = { targetId: info.targetId, title: info.title, url: info.url };
+    try {
+      const { sessionId } = await conn.send("Target.attachToTarget", { targetId: info.targetId, flatten: true });
+      Object.assign(row, await injector.diagnose(sessionId));
+      await conn.send("Target.detachFromTarget", { sessionId }, undefined, 5000).catch(() => {});
+    } catch (e) {
+      row.error = e.message;
+    }
+    rows.push(row);
+  }
+  return rows;
 }
 
 /* ---------- main ---------- */
@@ -329,13 +414,24 @@ async function main() {
   }
 
   const conn = await Connection.open(endpoint);
+
+  if (flags.diagnose) {
+    const rows = await runDiagnose(conn, flags);
+    const text = `# diagnose port ${flags.port} — ${new Date().toISOString()}\n${JSON.stringify(rows, null, 2)}`;
+    console.log(text);
+    console.log("\nReport appended to " + writeVerdict(text, "cdp-diagnose.log"));
+    conn.close();
+    return;
+  }
+
   const injector = new Injector(conn, flags);
   await injector.start();
   console.log(`Injected into ${injector.sessions.size} window(s).`);
 
   if (!flags.check) {
     console.log("Watching for new windows — leave this running (Ctrl+C to stop).");
-    console.log("Alt+R opens the Persian text panel once a chat is on screen.");
+    console.log("The «ا» button at the top-right of the chat opens the settings panel; Alt+R toggles RTL, Alt+Shift+R shows or hides that button.");
+    console.log("Something looks off?  node live.js --diagnose   (read-only)");
     const tick = setInterval(() => {
       injector.report().then((r) => say(flags, `  ${new Date().toLocaleTimeString()} ${r.length} live window(s)`), () => {});
     }, 15000);
@@ -359,8 +455,11 @@ async function main() {
   const text = formatReport(reports, rows, flags.port);
   console.log(text);
   console.log("Verdict appended to " + writeVerdict(text));
-  const failed = rows.filter((r) => !r.pass);
-  console.log(failed.length ? `\nIncomplete: ${failed.map((f) => f.name).join(", ")}` : "\nCDP route works: the debug port is honored and the patch reaches the chat DOM.");
+  const failed = rows.filter((r) => r.pass === false);
+  const unsure = rows.filter((r) => r.pass === null);
+  if (failed.length) console.log(`\nIncomplete: ${failed.map((f) => f.name).join(", ")}`);
+  else if (unsure.length) console.log(`\nPartly unverified: ${unsure.map((f) => f.name).join(", ")} — the rest passed.`);
+  else console.log("\nCDP route works: the debug port is honored and the patch reaches the chat DOM.");
   conn.close();
   process.exit(failed.length ? 1 : 0);
 }

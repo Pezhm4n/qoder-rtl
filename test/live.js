@@ -12,7 +12,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const { runtimeSource, probeSource, inlineStylesheet, fontDataUri } = require("../lib/payload");
+const { runtimeSource, probeSource, diagnoseSource, inlineStylesheet, fontBase64, FONT_FAMILY } = require("../lib/payload");
 const { FONT_NAME } = require("../lib/inject");
 
 let failures = 0;
@@ -28,18 +28,24 @@ function main() {
   const css = inlineStylesheet();
   const src = runtimeSource();
   const probe = probeSource();
+  const diagnose = diagnoseSource();
 
-  console.log(`payload: stylesheet ${css.length} B, full source ${src.length} B`);
+  console.log(`payload: stylesheet ${css.length} B, font ${fontBase64().length} B base64, full source ${src.length} B`);
 
-  check("font inlined as a data: URI", css.includes("data:font/woff2;base64,") && css.includes(fontDataUri().slice(0, 40)));
+  check("no file-based @font-face survives inlining", !css.includes(FONT_NAME) && !/@font-face/.test(css));
   check("no relative file references left", !/url\(\s*["']?\.\//.test(css), (css.match(/url\(\s*["']?\.[^)]*/) || []).join(" "));
-  check("original font name is gone from the CSS", !css.includes(FONT_NAME));
-  check("stylesheet still declares the font family", css.includes('font-family: "Vazirmatn QRT"'));
+  check("stylesheet still declares the font family", css.includes(`"${FONT_FAMILY}"`));
   check("stylesheet keeps the chat anchors", css.includes("[data-chat-turn]") && css.includes(".markdown-body"));
+  check("root state is keyed on data-qrt-* attributes, not classes", !/html\.qrt-/.test(css) && css.includes('html[data-qrt-mode="smart"]') && css.includes("html[data-qrt-tables]"));
+
+  check("font is registered through the FontFace API", src.includes("new FontFace(") && src.includes("document.fonts.add("));
+  check("font bytes ride along exactly once", src.split(fontBase64()).length === 2);
+  check("font fallback builds its data: URI at runtime", src.includes("data-qoder-rtl-font") && src.includes("base64,' + B64 + '"));
 
   for (const [name, code] of [
     ["runtime source", src],
-    ["probe source", probe]
+    ["probe source", probe],
+    ["diagnose source", diagnose]
   ]) {
     let parses = true;
     let err = "";
@@ -60,11 +66,20 @@ function main() {
   check("runtime body is the same file the archive route ships", src.includes(fs.readFileSync(path.join(__dirname, "..", "patches", "rtl.js"), "utf8").trim().slice(0, 200)));
 
   /* addScriptToEvaluateOnNewDocument runs before <body> exists, so at document
-     start the payload may only touch documentElement and register listeners. */
+     start the payload may only touch documentElement and register listeners.
+     Deliberately no FontFace/atob here: it proves the CSS fallback path works. */
   const sandbox = {
     document: {
       readyState: "loading",
-      documentElement: { classList: { toggle() {}, add() {}, remove() {}, contains: () => false }, appendChild() {} },
+      documentElement: {
+        classList: { toggle() {}, add() {}, remove() {}, contains: () => false },
+        attributes: [],
+        setAttribute() {},
+        getAttribute: () => null,
+        hasAttribute: () => false,
+        removeAttribute() {},
+        appendChild() {}
+      },
       head: null,
       body: null,
       querySelector: () => null,
@@ -97,6 +112,11 @@ function main() {
     ranTwice = false;
     console.log(`        (document-start run threw: ${e.message})`);
   }
+  check(
+    "font prelude falls back to a runtime @font-face without FontFace",
+    sandbox.window.__QRT_FONT__ && sandbox.window.__QRT_FONT__.status === "css-fallback",
+    JSON.stringify(sandbox.window.__QRT_FONT__ || null)
+  );
   if (ran) {
     try {
       vm.runInContext(src, sandbox); /* a reload/new document must not throw either */

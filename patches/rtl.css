@@ -5,6 +5,8 @@
  */
 
 @font-face {
+  /* Archive route only: the CDP route strips this block and registers the same
+     bytes through the FontFace API, which no font-src policy can refuse. */
   font-family: "Vazirmatn QRT";
   src: url("./qoder-rtl-vazirmatn.woff2") format("woff2");
   font-weight: 100 900;
@@ -29,6 +31,13 @@
   line-height: var(--qrt-leading);
 }
 
+/* Qoder also sets font-family on the prose elements themselves, so the container
+   rule alone never reaches them. Code islands below still win (!important). */
+[data-chat-message-text] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, td, th, a, span, strong, em, b, i, label, figcaption, caption, summary),
+[data-chat-composer] :is([contenteditable="true"], textarea) {
+  font-family: inherit;
+}
+
 [data-chat-message-text] {
   font-size: calc(1em + var(--qrt-chat-size));
 }
@@ -50,30 +59,36 @@
   unicode-bidi: isolate;
 }
 
+/* ------------------------------------------------------------- root state */
+
+/* Mode switches live on data-qrt-* attributes, never on classes: Qoder's renderer
+   owns <html class="…"> and rewrites it, which would silently drop a class-based
+   switch. The runtime mirrors them as qrt-* classes for debugging only. */
+
 /* smart mode: qrt-fa / qrt-en are set by the runtime script per block */
-html.qrt-smart [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt).qrt-en {
+html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt).qrt-en {
   direction: ltr;
   text-align: left;
 }
 
-html.qrt-smart [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt).qrt-fa {
+html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt).qrt-fa {
   direction: rtl;
   text-align: right;
 }
 
-html.qrt-smart [data-chat-message-text] :is(ul, ol):has(> .qrt-en) {
+html[data-qrt-mode="smart"] [data-chat-message-text] :is(ul, ol):has(> .qrt-en) {
   direction: ltr;
 }
 
 /* force mode pins every prose block to RTL */
-html.qrt-force [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
-html.qrt-force [data-chat-composer] :is(textarea, [contenteditable="true"]) {
+html[data-qrt-mode="force"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
+html[data-qrt-mode="force"] [data-chat-composer] :is(textarea, [contenteditable="true"]) {
   direction: rtl !important;
   text-align: right !important;
 }
 
-html.qrt-off [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, td, th),
-html.qrt-off [data-chat-composer] :is(textarea, [contenteditable="true"]) {
+html[data-qrt-mode="off"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, td, th),
+html[data-qrt-mode="off"] [data-chat-composer] :is(textarea, [contenteditable="true"]) {
   direction: ltr !important;
   text-align: left !important;
   unicode-bidi: normal !important;
@@ -97,7 +112,7 @@ html.qrt-off [data-chat-composer] :is(textarea, [contenteditable="true"]) {
 
 /* ---------------------------------------------------------------- tables */
 
-html.qrt-tables [data-chat-message-text] table {
+html[data-qrt-tables] [data-chat-message-text] table {
   direction: rtl;
 }
 
@@ -107,12 +122,12 @@ html.qrt-tables [data-chat-message-text] table {
 }
 
 /* opt-in: mirror column order (cells keep their own text direction) */
-html.qrt-reverse [data-chat-message-text] table {
+html[data-qrt-reverse] [data-chat-message-text] table {
   display: table;
   direction: rtl;
 }
 
-html.qrt-reverse [data-chat-message-text] :is(th, td) {
+html[data-qrt-reverse] [data-chat-message-text] :is(th, td) {
   direction: ltr;
   unicode-bidi: plaintext;
   text-align: right;
@@ -140,6 +155,6 @@ html.qrt-reverse [data-chat-message-text] :is(th, td) {
   padding-inline: 0.32em;
 }
 
-html.qrt-off [data-chat-message-text] :is(pre, code) {
+html[data-qrt-mode="off"] [data-chat-message-text] :is(pre, code) {
   unicode-bidi: normal !important;
 }

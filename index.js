@@ -161,7 +161,7 @@ async function patch(install) {
 
     log("");
     ok("Done. Start Qoder and open a chat.");
-    log("  • Alt+R toggles RTL on/off");
+    log("  • Alt+R toggles RTL on/off, Alt+Shift+R shows or hides the settings button");
     log("  • The «ا» button at the top-right of the chat opens the settings panel");
     log("  • Qoder's auto-update overwrites app.asar — re-run this command afterwards");
     log(`  • Roll back anytime:  node ${path.relative(process.cwd(), path.join(ROOT, "index.js"))} --restore`);

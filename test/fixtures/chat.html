@@ -2,6 +2,12 @@
 <html lang="fa" dir="ltr">
   <head>
     <meta charset="utf-8" />
+    <!-- Mirrors Qoder's own policy, with font-src made stricter on purpose: the
+         payload registers the font from bytes, so it must not need a font fetch. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'"
+    />
     <title>Qoder RTL fixture — chat</title>
     <style>
       body {
@@ -55,5 +61,13 @@
       </div>
       <div data-chat-composer contenteditable="true">متن ورودی فارسی</div>
     </div>
+    <script>
+      /* Imitates Qoder's renderer, which owns <html class="…"> and rewrites it
+         whenever it re-renders. The patch surviving this is what proves its root
+         state no longer depends on classes. */
+      setInterval(function () {
+        document.documentElement.className = "theme-dark";
+      }, 500);
+    </script>
   </body>
 </html>

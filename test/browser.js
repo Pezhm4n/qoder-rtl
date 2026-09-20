@@ -97,10 +97,17 @@ async function main() {
   check("inline stylesheet installed", /PASS\s+stylesheet installed inline/.test(out));
   check("chat DOM hooks reachable", /PASS\s+chat DOM hooks reachable/.test(out));
   check("injected script threw no exception", !/injected script threw/.test(out));
+  check("font registered from inlined bytes", /PASS\s+Vazirmatn registered from inlined bytes/.test(out));
+  check("font resolves for page text", /PASS\s+Vazirmatn resolves for page text/.test(out), "document.fonts.check() never turned true");
+  check("chat prose computes to Vazirmatn", /PASS\s+chat prose computes to the Vazirmatn stack/.test(out));
   check("patch applied on the document root", /PASS\s+patch active on the document root/.test(out));
+  /* The fixture rewrites <html class="…"> every 500 ms, so empty classes here prove
+     the mode survives on data-qrt-* attributes rather than on classes. */
+  check("root state survives the page wiping html classes", /patch active on the document root \(data-qrt-mode=smart[^)]*classes=""/.test(out));
+  check("settings panel mounted and visible", /PASS\s+settings panel mounted and visible/.test(out));
   check("live.js exited cleanly", run.status === 0, `exit ${run.status}`);
-  const fontLine = out.match(/(PASS|FAIL)\s+Vazirmatn data-URI font loads \(([^)]*)\)/);
-  console.log(`  note  data-URI font: ${fontLine ? fontLine[1] + " " + fontLine[2] : "not reported"}`);
+  const fontLine = out.match(/(PASS|FAIL)\s+Vazirmatn resolves for page text \(([^)]*)\)/);
+  console.log(`  note  font: ${fontLine ? fontLine[1] + " " + fontLine[2] : "not reported"}`);
 
   finish(PROFILE, child.pid);
 }
