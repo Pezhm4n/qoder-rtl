@@ -12,7 +12,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const { runtimeSource, probeSource, diagnoseSource, inlineStylesheet, fontBase64, FONT_FAMILY } = require("../lib/payload");
+const { runtimeSource, probeSource, controlsProbeSource, diagnoseSource, inlineStylesheet, fontBase64, FONT_FAMILY } = require("../lib/payload");
 const { FONT_NAME } = require("../lib/inject");
 
 let failures = 0;
@@ -38,13 +38,35 @@ function main() {
   check("stylesheet keeps the chat anchors", css.includes("[data-chat-turn]") && css.includes(".markdown-body"));
   check("root state is keyed on data-qrt-* attributes, not classes", !/html\.qrt-/.test(css) && css.includes('html[data-qrt-mode="smart"]') && css.includes("html[data-qrt-tables]"));
 
+  /* Qoder's own utilities sit on the prose elements, so container-level rules are
+     not enough: these three must be repeated where the text actually is. */
+  const rtljs = fs.readFileSync(path.join(__dirname, "..", "patches", "rtl.js"), "utf8");
+  check("prose restates the font stack with !important", /\[data-chat-message-text\] :is\(p[^{]*\{\s*font-family: var\(--qrt-stack\) !important;/.test(css));
+  check("prose restates the line-height with !important", /\[data-chat-message-text\] :is\(p[^{]*\{\s*line-height: var\(--qrt-leading\) !important;/.test(css));
+  check("text size scales the subtree instead of the font-size", css.includes("zoom: var(--qrt-zoom)") && rtljs.includes('"--qrt-zoom:"') && !css.includes("--qrt-chat-size") && !rtljs.includes("--qrt-chat-size"));
+  check("settings widget is anchored bottom-right", rtljs.includes("bottom:14px;right:52px") && rtljs.includes("column-reverse") && !rtljs.includes("top:46px"));
+  /* Qoder's help button is a 28px fixed circle 18px from the same corner; the trigger
+     has to start past it or it swallows the click (our z-index is maximal). */
+  check("trigger clears Qoder's corner help button", (() => {
+    const m = /\.qrt-widget\{[^}]*right:(\d+)px/.exec(rtljs);
+    return !!m && Number(m[1]) >= 46;
+  })());
+  /* Qoder's chat font-size rule pins prose line-height with !important and a longer
+     selector than any injected sheet can justify, so the runtime stamps it inline. */
+  check('leading is stamped inline with !important', rtljs.includes('el.style.setProperty("line-height", want, "important")'));
+  check("dispose removes every inline leading stamp", /function clearLeading\([\s\S]*?\}\s*function applyConfig/.test(rtljs) && /function dispose\([\s\S]*clearLeading\(\)/.test(rtljs));
+
   check("font is registered through the FontFace API", src.includes("new FontFace(") && src.includes("document.fonts.add("));
+  /* Re-running the injector on a live window must upgrade the sheet it already
+     carries — skipping because "a marked style exists" keeps the old rules winning. */
+  check("re-injection rewrites the inline sheet instead of skipping it", src.includes("if (existing.textContent !== CSS) existing.textContent = CSS;"));
   check("font bytes ride along exactly once", src.split(fontBase64()).length === 2);
   check("font fallback builds its data: URI at runtime", src.includes("data-qoder-rtl-font") && src.includes("base64,' + B64 + '"));
 
   for (const [name, code] of [
     ["runtime source", src],
     ["probe source", probe],
+    ["controls source", controlsProbeSource()],
     ["diagnose source", diagnose]
   ]) {
     let parses = true;

@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.1.0";
+  var VERSION = "1.2.2";
   var STORE_KEY = "qoder_persian_rtl_config_v1";
   if (typeof window === "undefined" || typeof document === "undefined") return;
   var previous = window.__QODER_RTL__;
@@ -35,6 +35,20 @@
     "[data-chat-message-text] h6",
     "[data-chat-message-text] dd",
     "[data-chat-message-text] dt"
+  ].join(",");
+
+  /* Body prose whose leading the panel controls — the same set rtl.css repeats the
+     line-height for (headings keep their own rhythm). */
+  var LEAD_SELECTOR = [
+    "[data-chat-message-text] p",
+    "[data-chat-message-text] li",
+    "[data-chat-message-text] dd",
+    "[data-chat-message-text] dt",
+    "[data-chat-message-text] blockquote",
+    "[data-chat-message-text] td",
+    "[data-chat-message-text] th",
+    "[data-chat-composer][contenteditable]",
+    "[data-chat-composer] [contenteditable]"
   ].join(",");
 
   var defaults = {
@@ -120,6 +134,39 @@
     }
   }
 
+  /* Qoder's own chat font-size feature writes, per prose element,
+     html[data-font-size="small"] [data-chat-session-conversation-viewport]
+     [data-part-type="text"] .markdown-body p { line-height: 24px !important }
+     — that outranks our rule and lands later in the cascade, so the only reliable
+     way to make the leading setting stick is an inline !important declaration.
+     Specificity would be an arms race with the next Qoder release; inline wins. */
+  function applyLeading() {
+    if (!document.body) return;
+    var on = !!cfg.rtl && cfg.mode !== "off";
+    var want = on ? String(Number(cfg.lineHeight) || 1.75) : "";
+    var nodes = document.body.querySelectorAll(LEAD_SELECTOR);
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (want) {
+        if (el.getAttribute("data-qrt-lead") !== want) {
+          el.style.setProperty("line-height", want, "important");
+          el.setAttribute("data-qrt-lead", want);
+        }
+      } else if (el.hasAttribute("data-qrt-lead")) {
+        el.style.removeProperty("line-height");
+        el.removeAttribute("data-qrt-lead");
+      }
+    }
+  }
+
+  function clearLeading() {
+    var nodes = document.querySelectorAll("[data-qrt-lead]");
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].style.removeProperty("line-height");
+      nodes[i].removeAttribute("data-qrt-lead");
+    }
+  }
+
   function applyConfig() {
     var root = document.documentElement;
     var style = document.getElementById("qoder-rtl-vars");
@@ -135,7 +182,7 @@
     style.textContent =
       ":root{" +
       "--qrt-code:" + codeFont + ";" +
-      "--qrt-chat-size:" + (Number(cfg.chatSize) || 0) + "px;" +
+      "--qrt-zoom:" + (1 + (Number(cfg.chatSize) || 0) / 16).toFixed(4) + ";" +
       "--qrt-code-scale:" + (1 + (Number(cfg.codeSize) || 0) / 16).toFixed(3) + ";" +
       "--qrt-leading:" + (Number(cfg.lineHeight) || 1.75) + ";" +
       "--qrt-stack:" + fontStack('"Segoe UI",Tahoma,"Iranian Sans",sans-serif') + ";" +
@@ -152,6 +199,7 @@
     root.classList.toggle("qrt-force", f.mode === "force");
     root.classList.toggle("qrt-tables", f.tables);
     root.classList.toggle("qrt-reverse", f.reverse);
+    applyLeading();
   }
 
   /* Cheap drift check for the MutationObserver / safety-net interval. */
@@ -203,6 +251,7 @@
       pending = false;
       try {
         markBlocks();
+        applyLeading();
       } catch (e) {}
     });
   }
@@ -461,17 +510,24 @@
   }
 
   var panelCss = [
-    ".qrt-widget{position:fixed;top:46px;right:14px;z-index:2147483600;display:flex;flex-direction:column;",
-    "align-items:flex-end;font-family:var(--qrt-stack);direction:rtl;}",
+    /* Bottom-right, next to the composer, so the trigger is under the thumb and the
+       panel grows upward instead of covering the answer being read. The widget stays
+       direction:ltr on purpose: that makes align-items:flex-end mean the physical
+       right edge; the RTL setting belongs to the panel's own text.
+       right:52px clears Qoder's own help button — it is fixed at bottom-4.5/right-4.5
+       and measures 28px, so it owns the last 46px of that corner; sitting on top of it
+       (our z-index is maximal) would swallow its clicks. */
+    ".qrt-widget{position:fixed;bottom:14px;right:52px;z-index:2147483600;display:flex;",
+    "flex-direction:column-reverse;align-items:flex-end;font-family:var(--qrt-stack);}",
     ".qrt-trigger{width:26px;height:26px;border-radius:8px;border:1px solid rgba(127,127,127,.28);",
     "background:rgba(127,127,127,.12);color:inherit;font:600 13px/1 var(--qrt-stack);cursor:pointer;",
     "transition:background .16s ease;}",
     ".qrt-trigger:hover{background:rgba(127,127,127,.24);}",
-    ".qrt-panel{width:268px;max-height:68vh;overflow:auto;margin-top:6px;padding:12px;border-radius:12px;",
-    "border:1px solid rgba(127,127,127,.26);background:Canvas;color:CanvasText;box-shadow:0 14px 38px rgba(0,0,0,.32);",
-    "opacity:0;transform:scale(.95) translateY(-6px);transform-origin:top right;pointer-events:none;",
+    ".qrt-panel{direction:rtl;width:268px;max-height:62vh;overflow:auto;margin-bottom:6px;padding:12px;",
+    "border-radius:12px;border:1px solid rgba(127,127,127,.26);background:Canvas;color:CanvasText;",
+    "box-shadow:0 -14px 38px rgba(0,0,0,.32);",
+    "opacity:0;transform:scale(.95) translateY(6px);transform-origin:bottom right;pointer-events:none;",
     "transition:opacity .18s ease,transform .18s cubic-bezier(.16,1,.3,1);}",
-    ".qrt-panel::before{content:'';position:absolute;top:-10px;left:0;right:0;height:10px;}",
     ".qrt-widget.qrt-open .qrt-panel{opacity:1;transform:none;pointer-events:auto;}",
     ".qrt-title{font-size:13px;font-weight:700;padding-bottom:8px;margin-bottom:6px;",
     "border-bottom:1px solid rgba(127,127,127,.22);}",
@@ -545,6 +601,9 @@
     teardown.length = 0;
     if (shell && shell.parentNode) shell.parentNode.removeChild(shell);
     shell = null;
+    try {
+      clearLeading();
+    } catch (e) {}
     var transient = ["qoder-rtl-vars", "qoder-rtl-panel-style"];
     for (var j = 0; j < transient.length; j++) {
       var node = document.getElementById(transient[j]);

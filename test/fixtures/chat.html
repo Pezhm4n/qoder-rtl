@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fa" dir="ltr">
+<html lang="fa" dir="ltr" data-font-size="small">
   <head>
     <meta charset="utf-8" />
     <!-- Mirrors Qoder's own policy, with font-src made stricter on purpose: the
@@ -23,6 +23,38 @@
       p {
         line-height: 1.7;
       }
+      /* Copied from the real window (see node live.js --diagnose): Qoder hangs
+         Tailwind-style utilities on each prose element and sets its own font on
+         .markdown-body, so a rule on [data-chat-message-text] alone never reaches
+         the text. The patch has to win against these. */
+      .markdown-body {
+        font-family: system-ui;
+      }
+      .my-0 {
+        margin-top: 0;
+        margin-bottom: 0;
+      }
+      .text-sm {
+        font-size: 0.875rem;
+        line-height: 1.5rem;
+      }
+      .leading-6 {
+        line-height: 1.5rem;
+      }
+      .text-text {
+        color: #e6e6e6;
+      }
+      /* Qoder's own chat font-size setting, read live out of the browser with
+         CSS.getMatchedStylesForNode. It pins the same two properties with
+         !important and a much longer selector, so a container-level or even an
+         element-level injected rule cannot beat it — the runtime has to stamp the
+         leading inline. Keeping it here means the test fails if that stamp is lost. */
+      html[data-font-size="small"] [data-chat-session-conversation-viewport] [data-part-type="text"] .markdown-body,
+      html[data-font-size="small"] [data-chat-session-conversation-viewport] [data-part-type="text"] .markdown-body p,
+      html[data-font-size="small"] [data-chat-session-conversation-viewport] [data-part-type="text"] .markdown-body li {
+        font-size: 13px !important;
+        line-height: 24px !important;
+      }
       table {
         border-collapse: collapse;
       }
@@ -31,15 +63,31 @@
         border: 1px solid #333;
         padding: 4px 10px;
       }
+      /* Qoder's floating help button, measured live at bottom-4.5/right-4.5 with a
+         28px box (rect 1274,754,28x28 in a 1320x800 window). The settings trigger is
+         fixed in the same corner, so the fixture needs this to catch an overlap: the
+         --check probe counts any fixed element intersecting the trigger. */
+      .corner-help {
+        position: fixed;
+        bottom: 18px;
+        right: 18px;
+        width: 28px;
+        height: 28px;
+        z-index: 40;
+        border-radius: 9999px;
+        background: #2a2a2a;
+        color: #e6e6e6;
+      }
     </style>
   </head>
   <body>
+    <div class="corner-help" aria-label="help"></div>
     <div data-chat-session-region>
       <div data-chat-session-conversation-viewport>
         <div data-chat-turn="1">
-          <div data-chat-message-text>
+          <div data-chat-message-text data-part-type="text">
             <div class="markdown-body">
-              <p>این یک پاراگراف فارسی است که باید از راست به چپ خوانده شود، همراه با یک عبارت انگلیسی مثل "hello world" در وسط متن.</p>
+              <p class="my-0 text-sm leading-6 text-text">این یک پاراگراف فارسی است که باید از راست به چپ خوانده شود، همراه با یک عبارت انگلیسی مثل "hello world" در وسط متن.</p>
               <table>
                 <thead>
                   <tr>

@@ -21,7 +21,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawn, execSync } = require("node:child_process");
 const { Connection, browserEndpoint, portIsOpen, httpJson } = require("./lib/cdp");
-const { runtimeSource, probeSource, diagnoseSource } = require("./lib/payload");
+const { runtimeSource, probeSource, controlsProbeSource, diagnoseSource } = require("./lib/payload");
 const { findInstall } = require("./lib/detect");
 const { stateRoot } = require("./lib/backup");
 
@@ -212,6 +212,18 @@ class Injector {
     }
   }
 
+  async controls(sessionId) {
+    const res = await this.conn.send("Runtime.evaluate", { expression: controlsProbeSource(), returnByValue: true }, sessionId, 10000);
+    if (res.exceptionDetails || typeof res.result?.value !== "string") {
+      return { error: res.exceptionDetails?.text || "no controls result" };
+    }
+    try {
+      return JSON.parse(res.result.value);
+    } catch (e) {
+      return { error: "unparsable controls result" };
+    }
+  }
+
   async diagnose(sessionId) {
     const res = await this.conn.send("Runtime.evaluate", { expression: diagnoseSource(), returnByValue: true }, sessionId, 15000);
     if (typeof res.result?.value !== "string") return { error: res.exceptionDetails?.text || "no diagnose result" };
@@ -222,11 +234,21 @@ class Injector {
     }
   }
 
-  async report() {
+  async report(options = {}) {
     const out = [];
     for (const [sessionId, meta] of this.sessions) {
       const p = await this.probe(sessionId).catch((e) => ({ error: e.message }));
-      out.push({ targetId: meta.targetId, url: meta.url, patchedAt: meta.patchedAt, patchError: meta.patchError, ...p });
+      /* The controls probe briefly drives the runtime through other values, so it
+         runs only when somebody asked for a verdict, not on every watch tick. */
+      const controls = options.withControls ? await this.controls(sessionId).catch((e) => ({ error: e.message })) : null;
+      out.push({
+        targetId: meta.targetId,
+        url: meta.url,
+        patchedAt: meta.patchedAt,
+        patchError: meta.patchError,
+        ...(controls ? { controls } : null),
+        ...p
+      });
     }
     return out;
   }
@@ -238,6 +260,11 @@ class Injector {
 function verdictRows(reports) {
   const answered = reports.filter((r) => !r.error);
   const ok = (fn) => answered.some(fn);
+  /* Rows about the chat itself must be judged on a window that has chat: Qoder keeps a
+     second, empty target where the widget still mounts and nothing ever clashes, so
+     scoring the panel there would green a real corner overlap. */
+  const withChat = answered.filter((r) => r.hooks && r.hooks.messageText > 0);
+  const okChat = (fn) => (withChat.length ? withChat : answered).some(fn);
   const unknown = answered.length === 0 && reports.length > 0;
   const row = (name, pass, detail) => ({ name, pass: unknown ? null : pass, detail });
   return [
@@ -249,7 +276,13 @@ function verdictRows(reports) {
       pass: ok((r) => !!r.rtlVersion) || reports.some((r) => r.patchedAt),
       detail: reports.map((r) => r.rtlVersion || r.patchError || r.error || (r.patchedAt ? "injected, probe lost" : "—")).join(", ")
     },
-    row("stylesheet installed inline", ok((r) => r.styleTag === true), answered.map((r) => (r.styleTag ? "✓" : "✗")).join(" ") || "—"),
+    row(
+      "stylesheet installed inline and current",
+      ok((r) => r.styleTag === true && r.styleCount === 1),
+      /* More than one node means an older payload's sheet is still in the document
+         and can keep winning properties the new one changed. */
+      answered.map((r) => `nodes=${r.styleCount} bytes=${r.styleBytes}${r.styleCount > 1 ? " (stale sheet present)" : ""}`).join(" | ") || "—"
+    ),
     row(
       "Vazirmatn registered from inlined bytes",
       ok((r) => /loaded|added|css-fallback|pending/.test(String(r.font && r.font.registered))),
@@ -263,7 +296,41 @@ function verdictRows(reports) {
     row(
       "chat prose computes to the Vazirmatn stack",
       ok((r) => r.applied && /^["']?Vazirmatn QRT/.test(r.applied.textFont || "")),
-      answered.map((r) => (r.applied && r.applied.textFont) || "no prose element").join(" | ") || "—"
+      answered
+        .map((r) => {
+          const t = r.applied && r.applied.text;
+          return t ? `${t.tag} → ${t.fontFamily}` : "no prose element";
+        })
+        .join(" | ") || "—"
+    ),
+    row(
+      "line-height slider value reaches the prose",
+      ok((r) => {
+        const t = r.applied && r.applied.text;
+        const want = Number(r.settings && r.settings.lineHeight);
+        return t && t.ratio != null && want && Math.abs(t.ratio - want) <= 0.02;
+      }),
+      answered
+        .map((r) => {
+          const t = r.applied && r.applied.text;
+          return t ? `${t.lineHeight} on ${t.fontSize} = ${t.ratio} (config ${r.settings ? r.settings.lineHeight : "?"})` : "no prose element";
+        })
+        .join(" | ") || "—"
+    ),
+    row(
+      "panel sliders change the prose when applied",
+      ok((r) => {
+        const c = r.controls;
+        return !!c && !c.error && Math.abs(c.after.lineHeightPx - c.before.lineHeightPx) >= 0.5 && Math.abs(c.after.zoom - c.before.zoom) >= 0.02;
+      }),
+      answered
+        .map((r) => {
+          const c = r.controls;
+          if (!c) return "not probed";
+          if (c.error) return `probe: ${c.error}`;
+          return `leading ${c.before.lineHeightPx}→${c.after.lineHeightPx}px, zoom ${c.before.zoom}→${c.after.zoom}${same(c.settled, c.before) ? "" : " (config NOT restored)"}`;
+        })
+        .join(" | ") || "—"
     ),
     row(
       "chat DOM hooks reachable",
@@ -276,11 +343,40 @@ function verdictRows(reports) {
       answered.map((r) => `data-qrt-mode=${(r.applied && r.applied.mode) || "—"} vars=${r.applied ? r.applied.vars : "?"} fa=${r.applied ? r.applied.faBlocks : "?"} classes="${(r.applied && r.applied.htmlClasses) || ""}"`).join(" | ") || "—"
     ),
     row(
-      "settings panel mounted and visible",
-      ok((r) => r.applied && r.applied.panel > 0 && r.applied.panelVisible),
-      answered.map((r) => `nodes=${r.applied ? r.applied.panel : "?"} size=${(r.applied && r.applied.panelRect) || "none"}`).join(" | ") || "—"
+      "settings panel mounted, visible and bottom-right",
+      okChat((r) => {
+        const a = r.applied && r.applied.panelAnchors;
+        return (
+          !!r.applied &&
+          r.applied.panel > 0 &&
+          r.applied.panelVisible &&
+          !!a &&
+          a.bottomGap >= 0 &&
+          a.bottomGap <= 64 &&
+          a.rightGap >= 0 &&
+          a.rightGap <= 64 &&
+          a.topGap > a.bottomGap &&
+          /* Measured, not assumed: the trigger must not sit on any of the app's own
+             fixed corner UI, whose clicks it would swallow. */
+          !!a.cornerClash &&
+          a.cornerClash.n === 0
+        );
+      }),
+      (withChat.length ? withChat : answered)
+        .map((r) => {
+          const p = r.applied || {};
+          const a = p.panelAnchors;
+          const clash = a && a.cornerClash ? (a.cornerClash.n === 0 ? "clear" : `over ${a.cornerClash.n}: ${a.cornerClash.what || "?"}`) : "trigger?";
+          return `nodes=${p.panel} size=${p.panelRect || "none"}${a ? ` ${a.bottomGap}px from the bottom, ${a.rightGap}px from the right (${a.flexDirection}, corner ${clash})` : " not mounted"}`;
+        })
+        .join(" | ") || "—"
     )
   ];
+}
+
+/* The controls probe must leave the user's own config exactly as it found it. */
+function same(a, b) {
+  return !!a && !!b && Math.abs(a.lineHeightPx - b.lineHeightPx) < 0.05 && Math.abs(a.zoom - b.zoom) < 0.001;
 }
 
 function hintsFor(rows) {
@@ -298,8 +394,17 @@ function hintsFor(rows) {
   if (failed.includes("chat prose computes to the Vazirmatn stack") && !failed.includes("Vazirmatn resolves for page text")) {
     hints.push("the font is loaded but Qoder's own font-family rule wins on the prose elements — node live.js --diagnose prints the computed stack per element, which selector needs !important.");
   }
-  if (failed.includes("settings panel mounted and visible")) {
-    hints.push("nodes=0 → the widget was never mounted (check rtl.config.panel, or press Alt+Shift+R); nodes>0 with size=0x0 → something in the page hides or re-parents .qrt-widget.");
+  if (failed.includes("stylesheet installed inline and current")) {
+    hints.push("nodes>1 → an older payload's <style data-qoder-rtl> is still in the document and can out-rule the new sheet; the prelude rewrites it in place, so re-running the injector fixes it.");
+  }
+  if (failed.includes("line-height slider value reaches the prose")) {
+    hints.push("the prose leading is not the configured ratio — Qoder stamps line-height !important on its own prose rules (its chat font-size setting), so the runtime has to leave an inline !important on the element; run --diagnose and check that the sampled paragraph carries data-qrt-lead.");
+  }
+  if (failed.includes("panel sliders change the prose when applied")) {
+    hints.push("the probe drives lineHeight/chatSize through the runtime and re-measures: no change means the var never reaches the text, 'probe: no runtime' means the payload is not the current version (restart the injector).");
+  }
+  if (failed.includes("settings panel mounted, visible and bottom-right")) {
+    hints.push("nodes=0 → the widget was never mounted (check rtl.config.panel, or press Alt+Shift+R); nodes>0 with size=0x0 → something in the page hides or re-parents .qrt-widget; a large bottom-gap number → the widget is not anchored to the window edge, i.e. an older payload is still running; re-run the injector; a right-gap under 46 → the trigger overlaps Qoder's own corner help button and steals its clicks (the row prints 'over N: <classes>' for whatever it collides with).");
   }
   if (rows.some((r) => r.pass === null)) {
     hints.push("UNKNOWN rows are windows whose probe never answered (hidden/destroyed target); the patch itself may still be applied.");
@@ -314,9 +419,11 @@ function formatReport(reports, rows, port) {
   for (const r of reports) {
     lines.push(
       `- ${r.targetId}\n    url     ${r.url}\n    patched ${r.patchedAt || "n/a"}${r.patchError ? " (error: " + r.patchError + ")" : ""}\n    version ${r.rtlVersion || r.error || "absent"}`,
-      `    css     style=${r.styleTag} font=${JSON.stringify(r.font || null)}`,
+      `    css     style=${r.styleTag} nodes=${r.styleCount} bytes=${r.styleBytes} font=${JSON.stringify(r.font || null)}`,
       `    hooks   ${JSON.stringify(r.hooks || {})}`,
-      `    applied ${JSON.stringify(r.applied || {})}`
+      `    prose   ${JSON.stringify((r.applied && r.applied.text) || {})} settings ${JSON.stringify(r.settings || {})}`,
+      `    applied ${JSON.stringify(r.applied || {})}`,
+      ...(r.controls ? [`    controls ${JSON.stringify(r.controls)}`] : [])
     );
   }
   for (const row of rows) lines.push(`${mark(row.pass)}  ${row.name} (${row.detail})`);
@@ -450,7 +557,7 @@ async function main() {
   }
 
   await new Promise((r) => setTimeout(r, 4000));
-  const reports = await injector.report();
+  const reports = await injector.report({ withControls: true });
   const rows = verdictRows(reports);
   const text = formatReport(reports, rows, flags.port);
   console.log(text);

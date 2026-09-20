@@ -17,7 +17,7 @@
 :root {
   --qrt-fa: "Vazirmatn QRT";
   --qrt-code: ui-monospace, "Cascadia Mono", Consolas, "Segoe UI Mono", monospace;
-  --qrt-chat-size: 0px;
+  --qrt-zoom: 1;
   --qrt-code-scale: 1;
   --qrt-leading: 1.75;
   --qrt-stack: "Vazirmatn QRT", "Segoe UI", Tahoma, "Iranian Sans", sans-serif;
@@ -25,25 +25,34 @@
 
 /* ------------------------------------------------------------------ scope */
 
+/* Qoder puts its own utility classes on the prose elements themselves
+   (text-sm / leading-6 / text-text) and sets a font on .markdown-body, so a
+   declaration on the container alone never reaches the text: the rules that must
+   win are repeated on the elements, with !important where a utility wins.
+   The stack is restated rather than `inherit`, because inherit would take
+   .markdown-body's own family instead of ours. */
+
 [data-chat-message-text],
 [data-chat-composer] {
   font-family: var(--qrt-stack) !important;
   line-height: var(--qrt-leading);
+  /* The text-size control scales the subtree instead of overriding each
+     element's own font-size, so relative sizes (headings, small print) survive. */
+  zoom: var(--qrt-zoom);
 }
 
-/* Qoder also sets font-family on the prose elements themselves, so the container
-   rule alone never reaches them. Code islands below still win (!important). */
 [data-chat-message-text] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, td, th, a, span, strong, em, b, i, label, figcaption, caption, summary),
 [data-chat-composer] :is([contenteditable="true"], textarea) {
-  font-family: inherit;
+  font-family: var(--qrt-stack) !important;
 }
 
-[data-chat-message-text] {
-  font-size: calc(1em + var(--qrt-chat-size));
-}
-
-[data-chat-composer] {
-  font-size: calc(1em + var(--qrt-chat-size));
+[data-chat-message-text] :is(p, li, dd, dt, blockquote, td, th, figcaption, caption, summary),
+[data-chat-composer] :is([contenteditable="true"], textarea) {
+  line-height: var(--qrt-leading) !important;
+  /* Qoder's chat font-size setting pins the same property with a longer selector
+     and !important, later in the cascade than any injected sheet; the runtime
+     stamps `line-height … !important` inline on those elements to win, and this
+     rule is what holds the value between its passes. */
 }
 
 /* --------------------------------------------------------------- content */

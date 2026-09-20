@@ -91,7 +91,6 @@ async function main() {
   const run = spawnSync(process.execPath, [path.join(ROOT, "live.js"), "--port", String(PORT), "--check"], { encoding: "utf8" });
   const out = (run.stdout || "") + (run.stderr || "");
   console.log(out.replace(/^/gm, "    "));
-
   check("live.js attached to the page target", /page targets visible over CDP \(1 target/.test(out) || /page targets visible over CDP \((\d+) target/.test(out));
   check("payload injected into the page", /PASS\s+payload injected/.test(out), "no __QODER_RTL__");
   check("inline stylesheet installed", /PASS\s+stylesheet installed inline/.test(out));
@@ -100,12 +99,27 @@ async function main() {
   check("font registered from inlined bytes", /PASS\s+Vazirmatn registered from inlined bytes/.test(out));
   check("font resolves for page text", /PASS\s+Vazirmatn resolves for page text/.test(out), "document.fonts.check() never turned true");
   check("chat prose computes to Vazirmatn", /PASS\s+chat prose computes to the Vazirmatn stack/.test(out));
+  /* Qoder's own utilities (text-sm / leading-6) and its .markdown-body font sit on
+     the prose itself, so the fixture copies them: matching the configured ratio here
+     means the patch out-specifies them rather than only setting a container default. */
+  check("configured line-height reaches the prose", /PASS\s+line-height slider value reaches the prose/.test(out));
+  check("line-height and text-size sliders change measured prose", /PASS\s+panel sliders change the prose when applied/.test(out), "controls probe saw no change");
   check("patch applied on the document root", /PASS\s+patch active on the document root/.test(out));
   /* The fixture rewrites <html class="…"> every 500 ms, so empty classes here prove
      the mode survives on data-qrt-* attributes rather than on classes. */
   check("root state survives the page wiping html classes", /patch active on the document root \(data-qrt-mode=smart[^)]*classes=""/.test(out));
-  check("settings panel mounted and visible", /PASS\s+settings panel mounted and visible/.test(out));
+  check("settings panel mounted, visible and bottom-right", /PASS\s+settings panel mounted, visible and bottom-right/.test(out));
   check("live.js exited cleanly", run.status === 0, `exit ${run.status}`);
+
+  /* Injecting a second time into the same live document is the upgrade path the
+     user hits by re-running the injector without reloading Qoder. An older sheet
+     left in place would keep winning the properties the new payload changed. */
+  const again = spawnSync(process.execPath, [path.join(ROOT, "live.js"), "--port", String(PORT), "--check"], { encoding: "utf8" });
+  const out2 = (again.stdout || "") + (again.stderr || "");
+  console.log("  second injection into the same document:");
+  console.log(out2.replace(/^/gm, "    "));
+  check("re-injection leaves exactly one inline sheet", /PASS\s+stylesheet installed inline and current \(nodes=1 bytes=\d+/.test(out2), (out2.match(/stylesheet installed inline and current \([^)]*\)/) || ["not reported"])[0]);
+  check("re-injection keeps every verdict line green", again.status === 0 && !/FAIL\s/.test(out2), `exit ${again.status}`);
   const fontLine = out.match(/(PASS|FAIL)\s+Vazirmatn resolves for page text \(([^)]*)\)/);
   console.log(`  note  font: ${fontLine ? fontLine[1] + " " + fontLine[2] : "not reported"}`);
 
