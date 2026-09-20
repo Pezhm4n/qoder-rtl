@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.2.2";
+  var VERSION = "1.3.0";
   var STORE_KEY = "qoder_persian_rtl_config_v1";
   if (typeof window === "undefined" || typeof document === "undefined") return;
   var previous = window.__QODER_RTL__;
@@ -319,7 +319,8 @@
   var els = {};
   var shell = null;
   var open = false;
-  var hoverLock = null;
+  var triggerEl = null;
+  var panelEl = null;
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);
@@ -331,6 +332,10 @@
   function setOpen(v) {
     open = v;
     if (shell) shell.classList.toggle("qrt-open", v);
+    if (triggerEl) triggerEl.setAttribute("aria-expanded", v ? "true" : "false");
+    /* opacity alone only hides the panel from the eye: its sliders would stay in the
+       tab order and the a11y tree. inert takes them out until it is opened. */
+    if (panelEl) panelEl.inert = !v;
   }
 
   function row(labelText, control) {
@@ -425,15 +430,43 @@
     }
   }
 
+  /* A right-aligned paragraph with a left-pointing arrow: the button controls text
+     direction and typography, so it says that. Built with createElementNS because the
+     payload creates every node through the DOM API and never parses markup. */
+  var ICON_PATHS = ["M20 5H13", "M20 9.5H5", "M20 14h-8", "M20 19H7", "M10.5 16.5 7 19l3.5 2.5"];
+
+  function triggerIcon() {
+    var NS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.9");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    for (var i = 0; i < ICON_PATHS.length; i++) {
+      var path = document.createElementNS(NS, "path");
+      path.setAttribute("d", ICON_PATHS[i]);
+      svg.appendChild(path);
+    }
+    return svg;
+  }
+
   function buildPanel() {
-    var trigger = el("button", "qrt-trigger", "ا");
+    var trigger = el("button", "qrt-trigger");
     trigger.type = "button";
+    trigger.appendChild(triggerIcon());
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.setAttribute("aria-controls", "qoder-rtl-panel");
     trigger.title = "تنظیمات فارسی / RTL — Alt+R برای جهت، Alt+Shift+R برای نمایش/پنهان‌کردن این پنل";
     trigger.addEventListener("click", function () {
       setOpen(!open);
     });
 
     var panel = el("div", "qrt-panel");
+    panel.id = "qoder-rtl-panel";
+    panel.inert = true;
     panel.appendChild(el("div", "qrt-title", "تنظیمات متن فارسی"));
     panel.appendChild(row("راست‌چین فعال", toggle("rtl")));
     panel.appendChild(
@@ -481,17 +514,20 @@
     var widget = el("div", "qrt-widget");
     widget.appendChild(trigger);
     widget.appendChild(panel);
-    widget.addEventListener("mouseenter", function () {
-      clearTimeout(hoverLock);
-      hoverLock = setTimeout(function () {
-        setOpen(true);
-      }, 90);
-    });
-    widget.addEventListener("mouseleave", function () {
-      clearTimeout(hoverLock);
-      hoverLock = setTimeout(function () {
-        setOpen(false);
-      }, 260);
+    triggerEl = trigger;
+    panelEl = panel;
+    /* Hover used to open this panel, which made it jump out at the cursor every time
+       the mouse passed the corner without any click. Click is the only gesture now;
+       dismissing by clicking anywhere else is what replaces moving the mouse away. */
+    function onDocDown(ev) {
+      if (!open) return;
+      var t = ev.target;
+      if (t && t.closest && t.closest(".qrt-widget")) return;
+      setOpen(false);
+    }
+    document.addEventListener("pointerdown", onDocDown, true);
+    addDisposable(function () {
+      document.removeEventListener("pointerdown", onDocDown, true);
     });
     return widget;
   }
@@ -519,10 +555,16 @@
        (our z-index is maximal) would swallow its clicks. */
     ".qrt-widget{position:fixed;bottom:14px;right:52px;z-index:2147483600;display:flex;",
     "flex-direction:column-reverse;align-items:flex-end;font-family:var(--qrt-stack);}",
-    ".qrt-trigger{width:26px;height:26px;border-radius:8px;border:1px solid rgba(127,127,127,.28);",
-    "background:rgba(127,127,127,.12);color:inherit;font:600 13px/1 var(--qrt-stack);cursor:pointer;",
-    "transition:background .16s ease;}",
-    ".qrt-trigger:hover{background:rgba(127,127,127,.24);}",
+    ".qrt-trigger{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;",
+    "justify-content:center;padding:0;border:1px solid rgba(127,127,127,.3);background:Canvas;",
+    "color:CanvasText;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.26);",
+    "transition:transform .14s ease,background-color .16s ease,color .16s ease,border-color .16s ease;}",
+    /* A 1px lift, not a bounce: the animation has to match a 34px target. */
+    ".qrt-trigger:hover{border-color:Highlight;color:Highlight;transform:translateY(-1px);}",
+    ".qrt-trigger:active{transform:translateY(0);}",
+    ".qrt-trigger[aria-expanded=true]{background:Highlight;border-color:Highlight;color:HighlightText;}",
+    ".qrt-trigger:focus-visible{outline:2px solid Highlight;outline-offset:2px;}",
+    ".qrt-trigger svg{display:block;width:20px;height:20px;}",
     ".qrt-panel{direction:rtl;width:268px;max-height:62vh;overflow:auto;margin-bottom:6px;padding:12px;",
     "border-radius:12px;border:1px solid rgba(127,127,127,.26);background:Canvas;color:CanvasText;",
     "box-shadow:0 -14px 38px rgba(0,0,0,.32);",

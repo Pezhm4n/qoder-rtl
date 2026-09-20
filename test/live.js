@@ -54,6 +54,15 @@ function main() {
   /* Qoder's chat font-size rule pins prose line-height with !important and a longer
      selector than any injected sheet can justify, so the runtime stamps it inline. */
   check('leading is stamped inline with !important', rtljs.includes('el.style.setProperty("line-height", want, "important")'));
+
+  /* The panel used to open on widget mouseenter, so merely passing the corner popped
+     it. Click is the only opening gesture; outside-click dismisses it, and a closed
+     panel must leave the tab order through inert rather than opacity alone. */
+  check("no hover gesture opens the panel", !rtljs.includes('"mouseenter"') && !rtljs.includes('"mouseover"'));
+  check("trigger is an inline SVG icon, not a glyph", rtljs.includes('createElementNS(NS, "svg")') && rtljs.includes('el("button", "qrt-trigger")') && !rtljs.includes('"qrt-trigger", "ا"'));
+  check("open state is exposed to assistive tech", /triggerEl.setAttribute\("aria-expanded"/.test(rtljs) && rtljs.includes("panelEl.inert = !v"));
+  check("outside click closes and is disposed", /addEventListener\("pointerdown", onDocDown, true\)/.test(rtljs) && /removeEventListener\("pointerdown", onDocDown, true\)/.test(rtljs));
+  check("trigger grows to 34px with a focus-visible ring", rtljs.includes(".qrt-trigger{width:34px;height:34px") && rtljs.includes(".qrt-trigger:focus-visible"));
   check("dispose removes every inline leading stamp", /function clearLeading\([\s\S]*?\}\s*function applyConfig/.test(rtljs) && /function dispose\([\s\S]*clearLeading\(\)/.test(rtljs));
 
   check("font is registered through the FontFace API", src.includes("new FontFace(") && src.includes("document.fonts.add("));

@@ -15,7 +15,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
-const { portIsOpen } = require("../lib/cdp");
+const { Connection, browserEndpoint, portIsOpen } = require("../lib/cdp");
 
 const ROOT = path.join(__dirname, "..");
 const argvPort = process.argv.indexOf("--port");
@@ -72,6 +72,55 @@ async function startBrowser(exe) {
   return null;
 }
 
+/* Real input events, not a source grep: the panel used to open by itself when the
+   mouse only passed the corner, so the honest proof that this is gone is moving a
+   pointer there and reading the state back — then opening and dismissing it by click. */
+async function interactionTest() {
+  const STATE = `(function () {
+    var w = document.querySelector(".qrt-widget"), t = document.querySelector(".qrt-trigger"), p = document.querySelector(".qrt-panel");
+    if (!w || !t || !p) return JSON.stringify({ missing: true });
+    var r = t.getBoundingClientRect();
+    return JSON.stringify({
+      open: w.classList.contains("qrt-open"),
+      aria: t.getAttribute("aria-expanded"),
+      inert: !!p.inert,
+      x: Math.round(r.left + r.width / 2),
+      y: Math.round(r.top + r.height / 2)
+    });
+  })()`;
+  let conn;
+  try {
+    conn = await Connection.open(await browserEndpoint(PORT));
+    const target = (await conn.send("Target.getTargets")).targetInfos.find((t) => t.type === "page" && /chat\.html$/.test(t.url));
+    if (!target) return check("settings button interaction test", false, "fixture target not found");
+    const { sessionId } = await conn.send("Target.attachToTarget", { targetId: target.targetId, flatten: true });
+    await conn.send("Runtime.enable", {}, sessionId);
+    const read = async () => JSON.parse((await conn.send("Runtime.evaluate", { expression: STATE, returnByValue: true }, sessionId)).result.value);
+    const move = (x, y) => conn.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" }, sessionId);
+    const click = async (x, y) => {
+      await conn.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 }, sessionId);
+      await conn.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 }, sessionId);
+    };
+
+    const start = await read();
+    check("settings button and panel are present", !start.missing && start.x > 0);
+    await move(20, 20);
+    await move(start.x, start.y);
+    const hovered = await read();
+    check("hovering the button does not open the panel", hovered.open === false && hovered.aria === "false", JSON.stringify(hovered));
+    await click(start.x, start.y);
+    const opened = await read();
+    check("clicking the button opens the panel", opened.open === true && opened.aria === "true" && opened.inert === false, JSON.stringify(opened));
+    await click(200, 200);
+    const dismissed = await read();
+    check("clicking outside closes the panel again", dismissed.open === false && dismissed.inert === true, JSON.stringify(dismissed));
+  } catch (e) {
+    check("settings button interaction test", false, e && e.message);
+  } finally {
+    if (conn) conn.close();
+  }
+}
+
 async function main() {
   const exe = findChromium();
   if (!exe) {
@@ -110,6 +159,9 @@ async function main() {
   check("root state survives the page wiping html classes", /patch active on the document root \(data-qrt-mode=smart[^)]*classes=""/.test(out));
   check("settings panel mounted, visible and bottom-right", /PASS\s+settings panel mounted, visible and bottom-right/.test(out));
   check("live.js exited cleanly", run.status === 0, `exit ${run.status}`);
+
+  console.log("  pointer interaction with the settings button:");
+  await interactionTest();
 
   /* Injecting a second time into the same live document is the upgrade path the
      user hits by re-running the injector without reloading Qoder. An older sheet
