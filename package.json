@@ -1,0 +1,48 @@
+{
+  "name": "qoder-persian-rtl",
+  "version": "1.0.0",
+  "description": "Persian/Arabic RTL + Vazirmatn for the Qoder desktop app: CDP live injection (default, no files touched) or asar patch with backup",
+  "keywords": [
+    "qoder",
+    "rtl",
+    "persian",
+    "farsi",
+    "arabic",
+    "vazirmatn",
+    "electron",
+    "asar",
+    "devtools-protocol",
+    "patcher"
+  ],
+  "license": "MIT",
+  "main": "index.js",
+  "bin": {
+    "qoder-persian-rtl": "index.js",
+    "qoder-rtl-live": "live.js"
+  },
+  "files": [
+    "index.js",
+    "live.js",
+    "lib",
+    "patches",
+    "assets",
+    "README.md"
+  ],
+  "scripts": {
+    "live": "node live.js",
+    "live:check": "node live.js --check",
+    "live:launcher": "node live.js --launcher",
+    "patch": "node index.js",
+    "verify": "node index.js --verify",
+    "restore": "node index.js --restore",
+    "status": "node index.js --status",
+    "test": "node test/roundtrip.js && node test/live.js && node test/archive.js",
+    "test:browser": "node test/browser.js"
+  },
+  "dependencies": {
+    "@electron/asar": "^4.2.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

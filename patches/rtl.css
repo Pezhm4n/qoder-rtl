@@ -1,0 +1,145 @@
+/*
+ * qoder-persian-rtl :: runtime stylesheet (chat-scoped; app chrome stays LTR)
+ * Anchored on Qoder 0.3.3 stable hooks: [data-chat-turn] / [data-chat-message-text]
+ * / [data-chat-composer] / [data-chat-session-conversation-viewport] / .markdown-body
+ */
+
+@font-face {
+  font-family: "Vazirmatn QRT";
+  src: url("./qoder-rtl-vazirmatn.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --qrt-fa: "Vazirmatn QRT";
+  --qrt-code: ui-monospace, "Cascadia Mono", Consolas, "Segoe UI Mono", monospace;
+  --qrt-chat-size: 0px;
+  --qrt-code-scale: 1;
+  --qrt-leading: 1.75;
+  --qrt-stack: "Vazirmatn QRT", "Segoe UI", Tahoma, "Iranian Sans", sans-serif;
+}
+
+/* ------------------------------------------------------------------ scope */
+
+[data-chat-message-text],
+[data-chat-composer] {
+  font-family: var(--qrt-stack) !important;
+  line-height: var(--qrt-leading);
+}
+
+[data-chat-message-text] {
+  font-size: calc(1em + var(--qrt-chat-size));
+}
+
+[data-chat-composer] {
+  font-size: calc(1em + var(--qrt-chat-size));
+}
+
+/* --------------------------------------------------------------- content */
+
+[data-chat-message-text] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, td, th, figcaption, caption, summary),
+[data-chat-composer] :is(textarea, [contenteditable="true"]) {
+  unicode-bidi: plaintext;
+  text-align: start;
+  direction: rtl;
+}
+
+[data-chat-message-text] :is(a, span, strong, em, b, i, u, s, sup, sub) {
+  unicode-bidi: isolate;
+}
+
+/* smart mode: qrt-fa / qrt-en are set by the runtime script per block */
+html.qrt-smart [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt).qrt-en {
+  direction: ltr;
+  text-align: left;
+}
+
+html.qrt-smart [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt).qrt-fa {
+  direction: rtl;
+  text-align: right;
+}
+
+html.qrt-smart [data-chat-message-text] :is(ul, ol):has(> .qrt-en) {
+  direction: ltr;
+}
+
+/* force mode pins every prose block to RTL */
+html.qrt-force [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
+html.qrt-force [data-chat-composer] :is(textarea, [contenteditable="true"]) {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+html.qrt-off [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, td, th),
+html.qrt-off [data-chat-composer] :is(textarea, [contenteditable="true"]) {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: normal !important;
+}
+
+/* lists: marker has to sit on the reading-start side */
+[data-chat-message-text] :is(ul, ol) {
+  direction: rtl;
+  padding-inline-start: 1.5em;
+  list-style-position: inside;
+}
+
+[data-chat-message-text] blockquote {
+  border-inline-start-width: 2px;
+  border-inline-end-width: 0;
+  border-left-width: 0;
+  padding-inline-start: 1em;
+  padding-inline-end: 0;
+  padding-left: 0;
+}
+
+/* ---------------------------------------------------------------- tables */
+
+html.qrt-tables [data-chat-message-text] table {
+  direction: rtl;
+}
+
+[data-chat-message-text] :is(th, td) {
+  text-align: start;
+  unicode-bidi: plaintext;
+}
+
+/* opt-in: mirror column order (cells keep their own text direction) */
+html.qrt-reverse [data-chat-message-text] table {
+  display: table;
+  direction: rtl;
+}
+
+html.qrt-reverse [data-chat-message-text] :is(th, td) {
+  direction: ltr;
+  unicode-bidi: plaintext;
+  text-align: right;
+}
+
+/* ------------------------------------------------------------ LTR islands */
+
+[data-chat-message-text] :is(pre, code, kbd, samp, var, output),
+[data-chat-message-text] :is(pre, code) *,
+[data-chat-composer] :is(code, pre, kbd, samp),
+[data-chat-message-text] :is([data-code-editor], .monaco-editor, .cm-editor, .xterm),
+[data-chat-message-text] :is([data-file-path], [class*="file-path"]),
+[data-chat-message-text] :is([data-language], [class*="shiki"], [class*="token-"]),
+[data-chat-message-text] :is([data-file-path], [class*="file-path"]) * {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate !important;
+  font-family: var(--qrt-code) !important;
+  font-size: calc(1em * var(--qrt-code-scale));
+}
+
+/* inline code inside an RTL paragraph must not drag neighbouring punctuation */
+[data-chat-message-text] :not(pre) > code {
+  display: inline-block;
+  padding-inline: 0.32em;
+}
+
+html.qrt-off [data-chat-message-text] :is(pre, code) {
+  unicode-bidi: normal !important;
+}

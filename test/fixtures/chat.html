@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fa" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Qoder RTL fixture — chat</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 24px;
+        background: #141414;
+        color: #e6e6e6;
+      }
+      .chat {
+        max-width: 720px;
+      }
+      p {
+        line-height: 1.7;
+      }
+      table {
+        border-collapse: collapse;
+      }
+      td,
+      th {
+        border: 1px solid #333;
+        padding: 4px 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div data-chat-session-region>
+      <div data-chat-session-conversation-viewport>
+        <div data-chat-turn="1">
+          <div data-chat-message-text>
+            <div class="markdown-body">
+              <p>این یک پاراگراف فارسی است که باید از راست به چپ خوانده شود، همراه با یک عبارت انگلیسی مثل "hello world" در وسط متن.</p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>ستون</th>
+                    <th>مقدار</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>سرعت</td>
+                    <td>۱۲۰ کیلومتر</td>
+                  </tr>
+                </tbody>
+              </table>
+              <pre><code>const x = 1; // این کامنت نباید به هم بریزد</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-chat-composer contenteditable="true">متن ورودی فارسی</div>
+    </div>
+  </body>
+</html>
