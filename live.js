@@ -18,29 +18,36 @@
  * The archive route (index.js) remains for installs without that fuse. */
 
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { spawn, execSync } = require("node:child_process");
-const { Connection, browserEndpoint, portIsOpen, httpJson } = require("./lib/cdp");
+const { Connection, browserEndpoint, portIsOpen, portState, describePort, adviceFor, defaultPort, httpJson } = require("./lib/cdp");
 const { runtimeSource, probeSource, controlsProbeSource, diagnoseSource } = require("./lib/payload");
 const { findInstall } = require("./lib/detect");
 const { stateRoot } = require("./lib/backup");
+const { launcherPaths: launcherPathsFor } = require("./lib/launcher");
 
-const DEFAULT_PORT = 9222;
+const DEFAULT_PORT = defaultPort();
 const DEFAULT_WAIT = 30;
-const HELP = `node live.js [--port 9222] [--wait 30] [--check] [--diagnose] [--start] [--launcher] [--list] [-v]
+const HELP = `node live.js [--port ${DEFAULT_PORT}] [--wait 30] [--check] [--diagnose] [--start] [--launcher] [--remove-launcher] [--list] [-v]
+
+  --port       wins over QODER_RTL_PORT, which wins over 9222
 
   --check      inject, probe every window, append the result to
                %LOCALAPPDATA%\\qoder-persian-rtl\\cdp-test.log, then exit
   --diagnose   read-only: report what the live window actually computed (fonts,
                computed font-family, panel state), no injection, cdp-diagnose.log
-  --start      start Qoder with --remote-debugging-port (quit it first: single instance)
+  --start      start Qoder with --remote-debugging-port (quit it first: single instance).
+               Refuses to launch when the port is already held, and says who holds it.
   --launcher   write Qoder-RTL.cmd next to live.js and in %LOCALAPPDATA%\\qoder-persian-rtl
                (that .cmd starts Qoder with the port and runs this injector after it)
-  --wait <s>   seconds to wait for the DevTools port to appear (default ${DEFAULT_WAIT})
+  --remove-launcher   delete both Qoder-RTL.cmd copies --launcher wrote
+  --wait <s>   seconds to wait for the DevTools port to appear (default ${DEFAULT_WAIT};
+               0 probes once and reports, which is what a status check wants)
   --list       show the page targets CDP can see`;
 
 function parseArgs(argv) {
-  const flags = { port: DEFAULT_PORT, wait: DEFAULT_WAIT, check: false, diagnose: false, start: false, launcher: false, list: false, verbose: false, help: false };
+  const flags = { port: DEFAULT_PORT, wait: DEFAULT_WAIT, check: false, diagnose: false, start: false, launcher: false, removeLauncher: false, list: false, verbose: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--port" || a === "-p") flags.port = Number(argv[++i]) || flags.port;
@@ -49,6 +56,7 @@ function parseArgs(argv) {
     else if (a === "--diagnose") flags.diagnose = true;
     else if (a === "--start") flags.start = true;
     else if (a === "--launcher") flags.launcher = true;
+    else if (a === "--remove-launcher") flags.removeLauncher = true;
     else if (a === "--list") flags.list = true;
     else if (a === "--verbose" || a === "-v") flags.verbose = true;
     else if (a === "--help" || a === "-h") flags.help = true;
@@ -78,25 +86,52 @@ function exePath() {
   return found;
 }
 
-function runningQoderPids() {
+/* tasklist prints one of three things, and they must not collapse into the same answer:
+   rows (running), its "No tasks" sentence (a genuine zero), or anything else (a broken
+   probe). The third used to read as the second, which let `--start` launch on top of a
+   running Qoder. */
+function parseTasklist(out) {
+  const lines = String(out).split(/\r?\n/).filter((l) => l.trim());
+  if (/INFO:\s*No tasks are running/i.test(out)) return { pids: [] };
+  const rows = lines.filter((l) => l.startsWith('"'));
+  if (!rows.length) return { pids: [], error: `tasklist printed something unexpected: ${(lines[0] || "<empty>").slice(0, 80)}` };
+  return { pids: rows.map((l) => (l.split('","')[1] || "").replace(/"/g, "")).filter(Boolean) };
+}
+
+/* Returns { pids, error } — and "no Qoder is running" must never be inferred from a probe
+   that failed. */
+function qoderProcesses() {
   if (process.platform !== "win32") {
     try {
-      return execSync("pgrep -x Qoder", { encoding: "utf8" }).split("\n").filter(Boolean);
+      return { pids: execSync("pgrep -x Qoder", { encoding: "utf8", windowsHide: true }).split(/\r?\n/).filter(Boolean) };
     } catch (e) {
-      return [];
+      /* pgrep exits 1 when nothing matched — that is a real zero, not a broken probe. */
+      if (e.status === 1 && !e.signal) return { pids: [] };
+      return { pids: [], error: (e.stderr || e.message).toString().split("\n")[0] };
     }
   }
   try {
-    return execSync('tasklist /FI "IMAGENAME eq Qoder.exe" /NH /FO CSV', { encoding: "utf8" })
-      .split("\n")
-      .map((l) => (l.split('","')[1] || "").replace(/"/g, ""))
-      .filter(Boolean);
+    return parseTasklist(execSync('tasklist /FI "IMAGENAME eq Qoder.exe" /NH /FO CSV', { encoding: "utf8", timeout: 15000, windowsHide: true }));
   } catch (e) {
-    return [];
+    return { pids: [], error: (e.stderr || e.message).toString().split("\n")[0] };
   }
 }
 
-/* AppData is hidden in Explorer, so the launcher also lands next to live.js. */
+/* AppData is hidden in Explorer, so the launcher also lands next to live.js — which
+   means --launcher writes two files and --remove-launcher has to clean up both. Both
+   copies are listed even when missing, so the removal report says what it looked for. */
+function launcherPaths() {
+  return launcherPathsFor(__dirname);
+}
+
+function removeLauncher() {
+  return launcherPaths().map((file) => {
+    const existed = fs.existsSync(file);
+    if (existed) fs.rmSync(file, { force: true });
+    return { file, existed };
+  });
+}
+
 function writeLauncher(port, wait) {
   const exe = exePath();
   const node = process.execPath;
@@ -114,9 +149,8 @@ function writeLauncher(port, wait) {
     "rem running copy, which has no debug port.\r\n" +
     `start "" "${exe}" --remote-debugging-port=${port}\r\n` +
     `start "Qoder RTL injector" "${node}" "${script}" --port ${port} --wait ${wait}\r\n`;
-  const appData = stateRoot();
-  fs.mkdirSync(appData, { recursive: true });
-  return [path.join(appData, "Qoder-RTL.cmd"), path.join(__dirname, "Qoder-RTL.cmd")].map((file) => {
+  fs.mkdirSync(stateRoot(), { recursive: true });
+  return launcherPaths().map((file) => {
     fs.writeFileSync(file, body, "ascii");
     return file;
   });
@@ -129,6 +163,57 @@ async function waitForPort(port, ms) {
     await new Promise((r) => setTimeout(r, 500));
   }
   return false;
+}
+
+/* Qoder writes DevToolsActivePort in its own user-data directory when it opens the port.
+   It is a record of the last start, not proof of a live endpoint — the file we found on
+   this machine named 9222 for a process that had already exited — but its timestamp does
+   answer the one question a failed launch leaves open: did the copy we started come up at
+   all, and on which port? */
+function devtoolsRecords() {
+  const home = os.homedir();
+  const roots =
+    process.platform === "darwin"
+      ? [path.join(home, "Library", "Application Support")]
+      : process.platform === "win32"
+        ? [process.env.APPDATA]
+        : [path.join(home, ".config")];
+  const out = [];
+  for (const root of roots.filter(Boolean)) {
+    let entries;
+    try {
+      entries = fs.readdirSync(root, { withFileTypes: true });
+    } catch (e) {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !/qoder/i.test(entry.name)) continue;
+      const file = path.join(root, entry.name, "DevToolsActivePort");
+      try {
+        const portLine = fs.readFileSync(file, "utf8").split(/\r?\n/)[0];
+        out.push({ file, port: Number(portLine) || "unreadable", mtime: fs.statSync(file).mtimeMs });
+      } catch (e) {
+        /* no record in that directory */
+      }
+    }
+  }
+  return out;
+}
+
+/* What the port probe measured, as lines of a report. The point of printing these is
+   that a bare "the port did not come up" got diagnosed wrongly once, so the failure
+   output now carries the OS's own answer instead of a guess. */
+function portObservations(state, qoder, records, startedAt) {
+  const lines = [
+    `      port now:      ${describePort(state)}`,
+    `      Qoder running: ${qoder.error ? `unknown - the process probe failed (${qoder.error})` : `${qoder.pids.length} process(es)`}`
+  ];
+  for (const r of records) {
+    const when = new Date(r.mtime).toISOString();
+    lines.push(`      app record:  ${r.file} names port ${r.port}, written ${when}${r.mtime >= startedAt ? " (during this launch)" : " (before this launch, so it is stale)"}`);
+  }
+  if (!records.length) lines.push("      app record:  no DevToolsActivePort found in the usual user-data roots");
+  return lines;
 }
 
 /* ---------- the injector ---------- */
@@ -594,21 +679,44 @@ async function main() {
     for (const file of writeLauncher(flags.port, flags.wait)) console.log("Wrote launcher: " + file);
     console.log("Quit Qoder completely, then double-click that .cmd — it opens Qoder with the debug port and injects the patch.");
     console.log("To audit a running session instead: node live.js --check");
+    console.log("To undo: node live.js --remove-launcher");
+    return;
+  }
+  if (flags.removeLauncher) {
+    for (const { file, existed } of removeLauncher()) console.log(`${existed ? "Removed" : "Not present"}: ${file}`);
+    console.log("Nothing in the Qoder install was touched — this only deletes the .cmd files this tool wrote.");
     return;
   }
 
-  let open = await portIsOpen(flags.port);
+  const state = await portState(flags.port);
+  let open = state.state === "serving";
   let launched = false;
+  let startedAt = 0;
+  let waited = 0;
 
   if (!open && flags.start) {
-    const pids = runningQoderPids();
-    if (pids.length) {
-      console.log(`Qoder is already running (${pids.length} processes) and enforces one instance per machine,`);
+    const qoder = qoderProcesses();
+    if (qoder.error) {
+      console.log(`Cannot tell whether Qoder is running: ${qoder.error}`);
+      console.log("So this refuses to launch: Qoder enforces one instance per machine, and starting on");
+      console.log("top of a running copy hands off to it with the debug-port flag dropped.");
+      console.log("Either fix that probe, or start Qoder once from a launcher: node live.js --launcher");
+      process.exit(2);
+    }
+    if (qoder.pids.length) {
+      console.log(`Qoder is already running (${qoder.pids.length} processes) and enforces one instance per machine,`);
       console.log("so a fresh launch hands off to it and the --remote-debugging-port flag is dropped.");
-      console.log("Fully quit Qoder first — this agent runs inside it, so I cannot do that for you.");
+      console.log("Fully quit Qoder first — its single-instance lock hands a fresh launch off to the");
+      console.log("running copy, which has no debug port. Nothing is killed here on purpose.");
+      process.exit(2);
+    }
+    if (state.state !== "free") {
+      console.log(`Not launching: ${describePort(state)}`);
+      console.log("      " + adviceFor(state));
       process.exit(2);
     }
     const exe = exePath();
+    startedAt = Date.now();
     console.log(`Launching ${exe} --remote-debugging-port=${flags.port}`);
     const child = spawn(exe, [`--remote-debugging-port=${flags.port}`], { detached: true, stdio: "ignore" });
     child.unref();
@@ -616,20 +724,29 @@ async function main() {
   }
 
   if (!open && (launched || flags.wait > 0)) {
-    const seconds = launched ? 60 : flags.wait;
-    console.log(`Waiting up to ${seconds}s for the DevTools endpoint on 127.0.0.1:${flags.port}…`);
-    open = await waitForPort(flags.port, seconds * 1000);
+    waited = launched ? 60 : flags.wait;
+    console.log(`Waiting up to ${waited}s for the DevTools endpoint on 127.0.0.1:${flags.port}…`);
+    open = await waitForPort(flags.port, waited * 1000);
   }
 
   if (!open) {
     if (launched) {
-      const text = `# port ${flags.port} — ${new Date().toISOString()}\nFAIL  nothing listened on 127.0.0.1:${flags.port} after launching Qoder.\n` +
-        "      This build ignores --remote-debugging-port, so the CDP route is unavailable.";
+      /* Re-probe rather than reuse `state`: the pre-launch value said "free", which is
+         exactly the wrong thing to print after the port failed to come up. */
+      const after = await portState(flags.port);
+      const text = [
+        `# port ${flags.port} — ${new Date().toISOString()}`,
+        `FAIL  nothing served DevTools on 127.0.0.1:${flags.port} for ${waited}s after launching Qoder.`,
+        ...portObservations(after, qoderProcesses(), devtoolsRecords(), startedAt),
+        `      what to do:  ${adviceFor(after)}`
+      ].join("\n");
       console.log(text);
       console.log("Verdict appended to " + writeVerdict(text));
       process.exit(1);
     }
-    console.log(`Qoder's DevTools port ${flags.port} is not open.`);
+    console.log(`Qoder's DevTools port ${flags.port} is not answering.`);
+    console.log(`      port now:  ${describePort(state)}`);
+    if (state.owner === "exited") console.log("      what to do:  " + adviceFor(state));
     console.log("Either:  node live.js --launcher   →  quit Qoder  →  run Qoder-RTL.cmd");
     console.log("or in one step (needs Qoder already quit):  node live.js --start --check");
     process.exit(2);
@@ -701,8 +818,13 @@ async function main() {
   process.exit(failed.length ? 1 : 0);
 }
 
-main().catch((e) => {
-  console.error("live.js failed:", e.message);
-  if (process.env.DEBUG) console.error(e.stack);
-  process.exit(1);
-});
+/* package.json "main" points here, so requiring this module must not boot an injector. */
+if (require.main === module) {
+  main().catch((e) => {
+    console.error("live.js failed:", e.message);
+    if (process.env.DEBUG) console.error(e.stack);
+    process.exit(1);
+  });
+}
+
+module.exports = { Injector, parseArgs, portIsOpen, qoderProcesses, parseTasklist, devtoolsRecords, portObservations };

@@ -1,7 +1,7 @@
 {
   "name": "qoder-persian-rtl",
-  "version": "1.8.0",
-  "description": "Persian/Arabic RTL + Vazirmatn for the Qoder desktop app: CDP live injection (default, no files touched) or asar patch with backup",
+  "version": "1.9.0",
+  "description": "Persian/Arabic RTL + Vazirmatn for the Qoder desktop app: CDP live injection by default (no install files touched), archive patch kept behind an explicit command",
   "keywords": [
     "qoder",
     "rtl",
@@ -10,17 +10,18 @@
     "arabic",
     "vazirmatn",
     "electron",
-    "asar",
     "devtools-protocol",
+    "asar",
     "patcher"
   ],
   "license": "MIT",
-  "main": "index.js",
+  "main": "live.js",
   "bin": {
-    "qoder-persian-rtl": "index.js",
-    "qoder-rtl-live": "live.js"
+    "qoder-rtl": "cli.js",
+    "qoder-persian-rtl": "cli.js"
   },
   "files": [
+    "cli.js",
     "index.js",
     "live.js",
     "lib",
@@ -29,17 +30,20 @@
     "README.md"
   ],
   "scripts": {
+    "start": "node cli.js start",
+    "check": "node cli.js check",
+    "status": "node cli.js status",
     "live": "node live.js",
     "live:check": "node live.js --check",
     "live:launcher": "node live.js --launcher",
     "patch": "node index.js",
     "verify": "node index.js --verify",
     "restore": "node index.js --restore",
-    "status": "node index.js --status",
-    "test": "node test/roundtrip.js && node test/live.js && node test/archive.js",
+    "asar:status": "node index.js --status",
+    "test": "node test/roundtrip.js && node test/live.js && node test/cli.js && node test/archive.js",
     "test:browser": "node test/browser.js"
   },
-  "dependencies": {
+  "devDependencies": {
     "@electron/asar": "^4.2.0"
   },
   "engines": {

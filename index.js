@@ -2,23 +2,33 @@
 "use strict";
 
 /*
- * qoder-persian-rtl
- * Adds Persian/Arabic RTL, bidi isolation for code, and an offline Vazirmatn
- * font to the Qoder desktop app's chat surface, then restores it on demand.
+ * qoder-persian-rtl — the ARCHIVE route (rewrites app.asar; needs @electron/asar).
  *
- *   npx qoder-persian-rtl              patch (auto-detect install)
- *   npx qoder-persian-rtl --status     report patch state and version
- *   npx qoder-persian-rtl --restore    roll back to the pre-patch archive
+ * Reach it through cli.js (`qoder-rtl patch --yes`), not as the package entry point:
+ * on Qoder 0.3.3 this route breaks app startup (asar integrity), while the CDP route
+ * in live.js works and writes nothing. cli.js is the bin; this file is one command.
+ *
+ *   node index.js             patch (auto-detect install)
+ *   node index.js --status    report patch state and version
+ *   node index.js --restore   roll back to the pre-patch archive
  */
 
 const fs = require("node:fs");
 const path = require("node:path");
-const asar = require("@electron/asar");
 
-const { findInstall, findRendererAsarPath, RENDERER_LAYOUTS } = require("./lib/detect");
+const { findInstall, findRendererAsarPath, RENDERER_LAYOUTS, asarModule } = require("./lib/detect");
 const rtl = require("./lib/inject");
 const backup = require("./lib/backup");
 const { swapInto, tmpRoot, readHeader, walk, patchArchive } = require("./lib/asar");
+
+/* This file *is* the archive route, but requiring @electron/asar at load time used to
+   drag it into every `npx` of the package — including the CDP commands, which never
+   touch an archive. Resolved on first use instead, with the error naming what to install. */
+let asar = null;
+function needAsar() {
+  if (!asar) asar = asarModule();
+  return asar;
+}
 
 const ROOT = __dirname;
 const argv = process.argv.slice(2);
@@ -67,6 +77,11 @@ function sampleEntries(asarPath, count) {
 
 /* Resolves the renderer entry straight out of the archive — no 220 MB extraction. */
 function statusOf(install) {
+  try {
+    needAsar();
+  } catch (e) {
+    return { patched: null, error: e.message };
+  }
   const entry = findRendererAsarPath(install.asarPath);
   if (!entry) {
     return {
