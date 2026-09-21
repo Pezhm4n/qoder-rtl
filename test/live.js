@@ -225,6 +225,37 @@ function main() {
     /codeShots\.length\s*\?[\s\S]{0,900}:\s*null/.test(livejs) && livejs.includes("no inline code rendered to measure"),
     (/const codeShots = [^\n]*/.exec(livejs) || [""])[0]);
 
+  /* ---- batch 8: the human turn. Qoder renders your own message as one div with the text
+       hanging directly on it — no `.markdown-body`, no `<p>` — so every rule that descended
+       from `[data-chat-message-text]` walked past it and the classifier never saw it. The
+       six groups below are one feature: pin the bubble RTL, let it be classified, stamp its
+       leading, and measure it in the verdict. Half of them is how the 1.4.0 bug happened. ---- */
+  const BUBBLE = "[data-user-bubble] [data-chat-message-text]";
+  const bubbleGroups = {
+    leading: /\[data-user-bubble\] \[data-chat-message-text\],[^{]*\{\s*line-height: var\(--qrt-leading\) !important;/,
+    direction: /\[data-user-bubble\] \[data-chat-message-text\],[^{]*\{\s*unicode-bidi: plaintext;/,
+    smartEn: /\[data-user-bubble\] \[data-chat-message-text\]\.qrt-en\s*\{\s*direction: ltr;/,
+    smartFa: /\[data-user-bubble\] \[data-chat-message-text\]\.qrt-fa\s*\{\s*direction: rtl;/,
+    force: /\[data-user-bubble\] \[data-chat-message-text\],[^{]*\{\s*direction: rtl !important;/,
+    off: /\[data-user-bubble\] \[data-chat-message-text\],[^{]*\{\s*direction: ltr !important;/
+  };
+  const missingGroups = Object.keys(bubbleGroups).filter((k) => !bubbleGroups[k].test(css));
+  check("the human bubble is carried by all six prose rule groups",
+    missingGroups.length === 0,
+    JSON.stringify({ missing: missingGroups, mentions: (css.match(/data-user-bubble/g) || []).length }));
+  const blockList = (/var BLOCK_SELECTOR = \[([\s\S]*?)\]\.join/.exec(rtljs) || [, ""])[1];
+  const leadList = (/var LEAD_SELECTOR = \[([\s\S]*?)\]\.join/.exec(rtljs) || [, ""])[1];
+  check("the bubble is both classifiable and stamped, in the runtime's own lists",
+    blockList.includes(BUBBLE) && leadList.includes(BUBBLE),
+    JSON.stringify({ block: blockList.includes(BUBBLE), lead: leadList.includes(BUBBLE) }));
+  check("the verdict measures the bubble instead of assuming it",
+    /userBubble: count\("\[data-user-bubble\] \[data-chat-message-text\]"\)/.test(probe) && probe.includes("userText: userBubble") && /var userBubble = null/.test(probe),
+    (probe.match(/var userBubble = null;[\s\S]{0,120}/) || [""])[0].replace(/\s+/g, " "));
+  /* Same honesty rule as the code-size row: no user message on screen is not a pass. */
+  check("the bubble row refuses to pass on a conversation with no user message",
+    /bubbleShots\.length\s*\?[\s\S]{0,1200}:\s*null/.test(livejs) && livejs.includes("no user message rendered to measure"),
+    (/const bubbleShots = [^\n]*/.exec(livejs) || [""])[0]);
+
   check("dispose removes every inline leading stamp", /function clearLeading\([\s\S]*?\}\s*function applyConfig/.test(rtljs) && /function dispose\([\s\S]*clearLeading\(\)/.test(rtljs));
 
   check("font is registered through the FontFace API", src.includes("new FontFace(") && src.includes("document.fonts.add("));

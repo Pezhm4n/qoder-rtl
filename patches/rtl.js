@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.8.0";
+  var VERSION = "1.8.1";
   var STORE_KEY = "qoder_persian_rtl_config_v1";
   if (typeof window === "undefined" || typeof document === "undefined") return;
   var previous = window.__QODER_RTL__;
@@ -47,7 +47,13 @@
        sits right-aligned with no .qrt-en to hand it back — the tables cells are exempt
        because the tables switch, not the classifier, owns them. */
     "[data-chat-message-text] figcaption",
-    "[data-chat-message-text] summary"
+    "[data-chat-message-text] summary",
+    /* The human turn is one `whitespace-pre-wrap` div with the text directly in it — no
+       `<p>` for the descendant selectors above to find — so without this line your own
+       message never got a verdict and sat under the app's LTR defaults while every reply
+       was RTL. The base CSS rule pins that container too, and an RTL-pinned block that
+       cannot be classified is exactly the 1.4.0 bug. */
+    "[data-user-bubble] [data-chat-message-text]"
   ].join(",");
 
   /* Body prose whose leading the panel controls. This list is the inline-stamping half of
@@ -66,6 +72,7 @@
     "[data-chat-message-text] caption",
     "[data-chat-message-text] figcaption",
     "[data-chat-message-text] summary",
+    "[data-user-bubble] [data-chat-message-text]",
     "[data-chat-composer] [contenteditable]",
     "[data-chat-composer] textarea",
     "[data-chat-composer] [data-chat-composer-placeholder]"

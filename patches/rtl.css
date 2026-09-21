@@ -47,6 +47,7 @@
 }
 
 [data-chat-message-text] :is(p, li, dd, dt, blockquote, td, th, figcaption, caption, summary),
+[data-user-bubble] [data-chat-message-text],
 [data-chat-composer] :is([contenteditable="true"], textarea, [data-chat-composer-placeholder]) {
   line-height: var(--qrt-leading) !important;
   /* Qoder's chat font-size setting pins the same property with a longer selector
@@ -66,8 +67,15 @@
    tables switch, not to the prose switch, and this rule used to force `direction: rtl`
    on every `<td>` regardless of that flag. Turning «RTL جدول‌ها» off therefore moved the
    columns back to LTR and left the text inside them right-aligned — half a toggle.
-   See the `html[data-qrt-tables]` block below, which owns table furniture as a unit. */
+   See the `html[data-qrt-tables]` block below, which owns table furniture as a unit.
+   `[data-user-bubble] [data-chat-message-text]` is the human turn, and it is the *container
+   itself* that holds the text: Qoder renders your own message as one `whitespace-pre-wrap`
+   div with no `<p>` inside it (read out of `out\renderer\assets\index-DDa3WwIe.js` at the
+   `data-message-kind:"user"` site), so every descendant-only rule above skipped it — the
+   assistant's markdown got `direction: rtl` through its `<p>`s and your message stayed
+   left-aligned in the app's own font metrics. */
 [data-chat-message-text] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, figcaption, summary),
+[data-user-bubble] [data-chat-message-text],
 [data-chat-composer] :is(textarea, [contenteditable="true"], [data-chat-composer-placeholder]) {
   unicode-bidi: plaintext;
   text-align: start;
@@ -88,12 +96,14 @@
    RTL rule above pins has to appear in these two lists as well — a tag that is forced RTL
    but never classified is precisely the 1.4.0 bug (an English figure caption sitting
    right-aligned with no class to argue with), and test/live.js checks that invariant. */
-html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-en {
+html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-en,
+html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-en {
   direction: ltr;
   text-align: left;
 }
 
-html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-fa {
+html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-fa,
+html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-fa {
   direction: rtl;
   text-align: right;
 }
@@ -108,12 +118,14 @@ html[data-qrt-mode="smart"] [data-chat-message-text] :is(ul, ol):has(> .qrt-en):
 
 /* force mode pins every prose block to RTL */
 html[data-qrt-mode="force"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
+html[data-qrt-mode="force"] [data-user-bubble] [data-chat-message-text],
 html[data-qrt-mode="force"] [data-chat-composer] :is(textarea, [contenteditable="true"], [data-chat-composer-placeholder]) {
   direction: rtl !important;
   text-align: right !important;
 }
 
 html[data-qrt-mode="off"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, td, th, figcaption, caption, summary),
+html[data-qrt-mode="off"] [data-user-bubble] [data-chat-message-text],
 html[data-qrt-mode="off"] [data-chat-composer] :is(textarea, [contenteditable="true"], [data-chat-composer-placeholder]) {
   direction: ltr !important;
   text-align: left !important;

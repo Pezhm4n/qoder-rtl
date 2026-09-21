@@ -44,6 +44,37 @@
       .text-text {
         color: #e6e6e6;
       }
+      /* The human turn's own utilities, copied from the classes on the real bubble
+         (`text-xs font-normal leading-4 text-text whitespace-pre-wrap break-words`, read
+         out of out\renderer\assets\index-DDa3WwIe.js). They are plain declarations
+         because Tailwind's are: what the fixture has to reproduce is that the app gives
+         this element a leading of its own, and that its text sits on the element itself
+         rather than in a <p> below it. */
+      .relative {
+        position: relative;
+      }
+      .flex {
+        display: flex;
+      }
+      .items-end {
+        align-items: flex-end;
+      }
+      .justify-end {
+        justify-content: flex-end;
+      }
+      .text-xs {
+        font-size: 0.75rem;
+        line-height: 1rem;
+      }
+      .leading-4 {
+        line-height: 1rem;
+      }
+      .whitespace-pre-wrap {
+        white-space: pre-wrap;
+      }
+      .break-words {
+        overflow-wrap: break-word;
+      }
       /* Measured on the live window with a read-only probe: an inline <code> computes
          12px inside a 13px <p>. What was identified is not the selector that wins there
          but the half of our own rule block that loses — the !important font-family
@@ -177,6 +208,23 @@
               </details>
               <pre><code>const x = 1; // این کامنت نباید به هم بریزد</code></pre>
             </div>
+          </div>
+        </div>
+        <!-- The human turn, which is what the fixture used to be missing entirely: 52
+                 browser checks passed while your own messages stayed left-aligned. Qoder
+                 renders it as ONE div with the text hanging directly on it — no .markdown-body,
+                 no <p> — so `data-chat-message-text` alone never reached it. The ids let the
+                 browser test read a verdict per bubble: a Persian one has to come out rtl/right
+                 and an English one ltr/left, and both have to carry a class, since an
+                 unclassifiable RTL-pinned block is the 1.4.0 bug in a new place. -->
+        <div data-chat-turn="2">
+          <div class="relative flex items-end justify-end" data-message-kind="user" data-user-message data-user-bubble>
+            <div id="t-user-fa" class="text-xs font-normal leading-4 text-text whitespace-pre-wrap break-words" data-part-index="0" data-part-type="text" data-chat-message-text>سلام! ممنون می‌شم جدول سرعت را دوباره بسازی، این لینک هم ببین: <a href="#">qoder.com/docs</a></div>
+          </div>
+        </div>
+        <div data-chat-turn="3">
+          <div class="relative flex items-end justify-end" data-message-kind="user" data-user-message data-user-bubble>
+            <div id="t-user-en" class="text-xs font-normal leading-4 text-text whitespace-pre-wrap break-words" data-part-index="0" data-part-type="text" data-chat-message-text>hi, please rebuild the speed table</div>
           </div>
         </div>
       </div>

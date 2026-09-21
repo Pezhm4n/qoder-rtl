@@ -168,7 +168,8 @@ async function settingsTest() {
     var bq = pick("blockquote"), enOl = pick("ol"), mixedUl = pick("ul");
     var byId = function (id) { return document.getElementById(id); };
     var codeHeavy = byId("t-code-heavy"), codeOnly = byId("t-code-only"), bomLine = byId("t-bom");
-    if (!p || !li || !liEn || !bq || !enOl || !mixedUl || !codeHeavy || !codeOnly || !bomLine) {
+    var userFa = byId("t-user-fa"), userEn = byId("t-user-en");
+    if (!p || !li || !liEn || !bq || !enOl || !mixedUl || !codeHeavy || !codeOnly || !bomLine || !userFa || !userEn) {
       return JSON.stringify({ error: "fixture prose is missing" });
     }
     var restore = { rtl: api.config.rtl, mode: api.config.mode, lineHeight: api.config.lineHeight, codeSize: api.config.codeSize };
@@ -203,6 +204,13 @@ async function settingsTest() {
       bomLine: ratio(bomLine),
       fa: document.querySelectorAll(".qrt-fa").length,
       en: document.querySelectorAll(".qrt-en").length,
+      /* The human turn: same hook, different shape (the text hangs on the container, so no
+         descendant rule reaches it and the classifier never saw it). Measured the same way as
+         any other block, plus whether the inline leading stamp landed on it. */
+      userFa: ratio(userFa),
+      userEn: ratio(userEn),
+      userStamp: { fa: userFa.hasAttribute("data-qrt-lead"), en: userEn.hasAttribute("data-qrt-lead") },
+      userMarkdown: !!(userFa.querySelector("p") || userEn.querySelector("p")),
       mixedUl: getComputedStyle(mixedUl).direction,
       enOl: getComputedStyle(enOl).direction
     };
@@ -211,6 +219,7 @@ async function settingsTest() {
       p: ratio(p),
       li: ratio(li),
       bq: ratio(bq),
+      userFa: ratio(userFa),
       marks: document.querySelectorAll(".qrt-fa,.qrt-en").length,
       root: document.documentElement.getAttribute("data-qrt-mode")
     };
@@ -253,11 +262,38 @@ async function settingsTest() {
         /* Exact counts, because a classifier that silently stops seeing a block type is
            the failure mode here: the fixture's figcaption pair, its <summary> and the
            paragraph inside <details> raised these from 4/5 to 6/7 (the caption and the
-           table cells are deliberately not classified — the tables switch owns those). */
-        val.smart.fa === 6 &&
-        val.smart.en === 7,
+           table cells are deliberately not classified — the tables switch owns those),
+           and Qoder's own human turn — two bubbles, one per language — raised them to 7/8. */
+        val.smart.fa === 7 &&
+        val.smart.en === 8,
       JSON.stringify(val.smart)
     );
+    /* The defect the owner reported: «چرا دیگه روی پیام‌های ورودی کاربر اعمال نمیشه؟».
+       It survived 52 browser checks because the fixture had no human turn at all, so
+       nothing existed for these rules to apply to. */
+    check(
+      "your own Persian message is right-aligned like a reply",
+      val.smart.userFa.dir === "rtl" && val.smart.userFa.align === "right" && /qrt-fa/.test(val.smart.userFa.cls),
+      JSON.stringify(val.smart.userFa)
+    );
+    check(
+      "your own English message stays left-aligned",
+      val.smart.userEn.dir === "ltr" && val.smart.userEn.align === "left" && /qrt-en/.test(val.smart.userEn.cls),
+      JSON.stringify(val.smart.userEn)
+    );
+    /* The CSS list and the classifier's list have to gain the bubble together: pinning it
+       RTL without letting it be classified would have moved the bug from "Persian reads
+       LTR" to "English reads RTL". */
+    check(
+      "the leading stamp reaches the bubble the way it reaches prose",
+      val.smart.userStamp.fa === true && val.smart.userStamp.en === true && holds(val.smart.userFa, 2.3) && holds(val.smart.userEn, 2.3),
+      JSON.stringify({ stamp: val.smart.userStamp, fa: val.smart.userFa, en: val.smart.userEn })
+    );
+    check("turning direction off returns your own message to LTR", val.off.userFa.dir === "ltr" && val.off.userFa.align === "left", JSON.stringify(val.off.userFa));
+    /* Not a behaviour check but the fixture's premise: Qoder puts the human turn's text on
+       the container instead of rendering markdown for it. If that ever stops being true,
+       the bubble rows above would be proving nothing and this is what says so. */
+    check("the fixture still renders the human turn as text on the container", val.smart.userMarkdown === false, JSON.stringify(val.smart.userMarkdown));
     /* These three are what the classifier used to get wrong: identifier text is
        pinned LTR by the stylesheet and zero-width format characters carry no language
        at all, so neither may decide which way the sentence around them runs. */
@@ -627,6 +663,9 @@ async function main() {
   check("configured line-height reaches the prose", /PASS\s+line-height slider value reaches the prose/.test(out));
   check("line-height and text-size sliders change measured prose", /PASS\s+panel sliders change the prose when applied/.test(out), "controls probe saw no change");
   check("patch applied on the document root", /PASS\s+patch active on the document root/.test(out));
+  /* The audit row that would have caught the reported defect live: it scores the human
+     bubble, and reads UNSURE rather than PASS when a conversation has none to measure. */
+  check("the verdict measures the user's own message", /PASS\s+your own messages follow the patch/.test(out), (out.match(/(PASS|FAIL|UNSURE)\s+your own messages[^\n]*/) || ["row not printed"])[0]);
   /* The fixture rewrites <html class="…"> every 500 ms, so empty classes here prove
      the mode survives on data-qrt-* attributes rather than on classes. */
   check("root state survives the page wiping html classes", /patch active on the document root \(data-qrt-mode=smart[^)]*classes=""/.test(out));

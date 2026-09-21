@@ -421,6 +421,10 @@ function verdictRows(reports) {
      is a fact about the chat rather than about the patch — and a row that scored it as
      PASS would be reporting an unmeasured feature as working. */
   const codeShots = answered.filter((r) => r.controls && !r.controls.error && r.controls.codeBefore && r.controls.codeBefore.code);
+  /* Same rule for the human turn: a conversation with no user message in it cannot show
+     whether the bubble is patched, so that row reads UNSURE rather than passing on the
+     strength of a measurement that never happened. */
+  const bubbleShots = answered.filter((r) => r.applied && r.applied.userText);
   return [
     { name: "page targets visible over CDP", pass: reports.length > 0, detail: `${reports.length} target(s)` },
     { name: "probes answered", pass: !unknown && reports.length > 0, detail: unknown ? reports.map((r) => r.error).filter(Boolean).join(" / ") || "—" : `${answered.length}/${reports.length}` },
@@ -508,6 +512,33 @@ function verdictRows(reports) {
             })
             .join(" | ")
         : answered.map((r) => (r.controls && r.controls.error ? `probe: ${r.controls.error}` : "no `[data-chat-message-text] :not(pre) > code` node in this conversation")).join(" | ") || "—"
+    },
+    {
+      /* The human turn is the one prose block Qoder does not render as markdown: it hangs
+         `data-chat-message-text` on the div holding the text, with no <p> below it, so
+         every descendant-only rule and the classifier's old tag list passed it by. A
+         Persian message of yours staying left-aligned while every reply is right-aligned is
+         exactly what the owner reported, and no earlier row could see it. */
+      name: bubbleShots.length ? "your own messages follow the patch, not only the replies" : "human bubble (no user message rendered to measure)",
+      pass: bubbleShots.length
+        ? bubbleShots.some((r) => {
+            const u = r.applied.userText;
+            if (r.applied.mode === "off") return u.direction === "ltr";
+            /* Score the verdict against the direction it claims, since smart mode may have
+               read this bubble as English — an unmarked bubble is the failure. */
+            if (u.cls === "qrt-fa") return u.direction === "rtl" && u.textAlign === "right";
+            if (u.cls === "qrt-en") return u.direction === "ltr" && u.textAlign === "left";
+            return false;
+          })
+        : null,
+      detail: bubbleShots.length
+        ? bubbleShots
+            .map((r) => {
+              const u = r.applied.userText;
+              return `${u.cls || "UNMARKED"} ${u.direction}/${u.textAlign} leading=${u.ratio} stamp=${u.stamp || "none"}${u.hasParagraph ? " (has <p>)" : ""}`;
+            })
+            .join(" | ")
+        : answered.map((r) => (r.hooks && r.hooks.messageText > 0 ? `${r.hooks.userBubble} bubble node(s) with ${r.hooks.turn} turn(s)` : "no chat rendered here")).join(" | ") || "—"
     },
     row(
       "chat DOM hooks reachable",
