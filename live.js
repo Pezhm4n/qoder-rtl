@@ -139,6 +139,10 @@ class Injector {
     this.flags = flags;
     this.source = runtimeSource();
     this.sessions = new Map(); /* sessionId -> { targetId, url, patchedAt } */
+    /* Targets whose Page domain never answered. They are not failures and they are not
+       windows that got patched — they are windows this run said nothing about, which is
+       how an unpatched Qoder window used to disappear from the report entirely. */
+    this.skipped = new Map(); /* sessionId -> { targetId, url, reason } */
   }
 
   async start() {
@@ -149,6 +153,10 @@ class Injector {
     this.conn.on("Target.targetDestroyed", (msg) => {
       for (const [sessionId, meta] of this.sessions) {
         if (meta.targetId === msg.params.targetId) this.sessions.delete(sessionId);
+      }
+      /* A destroyed window must not be retried, and must not stay on the report either. */
+      for (const [sessionId, meta] of this.skipped) {
+        if (meta.targetId === msg.params.targetId) this.skipped.delete(sessionId);
       }
     });
     const { targetInfos } = await this.conn.send("Target.getTargets");
@@ -169,16 +177,28 @@ class Injector {
 
   async onAttach(sessionId, info) {
     if (!info || info.type !== "page" || this.sessions.has(sessionId)) return;
-    const meta = { targetId: info.targetId, url: info.url, patchedAt: null, patchError: null };
+    /* busy is what tells a window that is still being attached from one that failed to
+       be patched: auto-attach runs on its own clock, so report() can meet a session
+       whose Page calls have not answered yet. */
+    const meta = { targetId: info.targetId, url: info.url, patchedAt: null, patchError: null, busy: true };
     this.sessions.set(sessionId, meta);
     say(this.flags, `  page: ${info.title || "(untitled)"} — ${String(info.url).slice(0, 90)}`);
     try {
       await this.conn.send("Page.enable", {}, sessionId, 8000);
     } catch (e) {
       this.sessions.delete(sessionId);
-      say(this.flags, `  skipped (no Page domain): ${e.message}`);
+      /* Keep the session: an undrawn document answers the Page domain once it paints,
+         and a target nobody remembers is a window that never gets patched. */
+      this.skipped.set(sessionId, { targetId: info.targetId, url: info.url, reason: e.message });
+      say(this.flags, `  skipped (no Page domain, will retry): ${e.message}`);
       return;
     }
+    await this.finishAttach(sessionId, meta);
+  }
+
+  /* Everything that needs a live Page domain, split out so retrySkipped() can resume a
+     session that was waiting for its document to render. */
+  async finishAttach(sessionId, meta) {
     /* Runs on every later document before the page's own scripts, and CSP does not apply to it. */
     try {
       await this.conn.send("Page.addScriptToEvaluateOnNewDocument", { source: this.source }, sessionId, 8000);
@@ -190,6 +210,30 @@ class Injector {
       meta.patchError = e.message;
       return null;
     });
+    meta.busy = false;
+  }
+
+  /* Retry the windows whose Page domain never answered. Qoder keeps one such target on
+     this build, and while it stays undrawn this costs one short call per tick; the day it
+     renders, it gets the patch instead of being silently absent from the report forever. */
+  async retrySkipped() {
+    const retried = [];
+    for (const [sessionId, entry] of [...this.skipped]) {
+      const meta = { targetId: entry.targetId, url: entry.url, patchedAt: null, patchError: null, busy: true };
+      try {
+        await this.conn.send("Page.enable", {}, sessionId, 8000);
+      } catch (e) {
+        entry.reason = e.message;
+        retried.push("still no Page domain");
+        continue;
+      }
+      this.skipped.delete(sessionId);
+      this.sessions.set(sessionId, meta);
+      say(this.flags, `  page answered on retry: ${String(entry.url).slice(0, 90) || "(untitled)"}`);
+      await this.finishAttach(sessionId, meta);
+      retried.push("patched");
+    }
+    return retried;
   }
 
   async patchNow(sessionId) {
@@ -237,6 +281,16 @@ class Injector {
   async report(options = {}) {
     const out = [];
     for (const [sessionId, meta] of this.sessions) {
+      /* A session still inside its attach pass has no answer to report. Probing it
+         anyway cost 10s for the probe plus 10s for the controls, and printed
+         "Runtime.evaluate timed out after 10s" in the place a version number goes,
+         which reads as a failed patch on a window that was merely being attached.
+         Qoder's undrawn second target sits in Page.enable for its whole budget, so
+         this is the normal state of the first report after startup, not an error. */
+      if (meta.busy) {
+        out.push({ targetId: meta.targetId, url: meta.url, busy: true, error: "injection still running" });
+        continue;
+      }
       const p = await this.probe(sessionId).catch((e) => ({ error: e.message }));
       /* The controls probe briefly drives the runtime through other values, so it
          runs only when somebody asked for a verdict, not on every watch tick. */
@@ -249,6 +303,11 @@ class Injector {
         ...(controls ? { controls } : null),
         ...p
       });
+    }
+    /* Skipped windows are part of the verdict: a run that patched one of two Qoder
+       windows has to be able to say so, instead of reporting one target and looking clean. */
+    for (const [, entry] of this.skipped) {
+      out.push({ targetId: entry.targetId, url: entry.url, skipped: true, error: entry.reason });
     }
     return out;
   }
@@ -267,6 +326,16 @@ function verdictRows(reports) {
   const okChat = (fn) => (withChat.length ? withChat : answered).some(fn);
   const unknown = answered.length === 0 && reports.length > 0;
   const row = (name, pass, detail) => ({ name, pass: unknown ? null : pass, detail });
+  /* "پنهان کردن پنل" is a supported state, not a broken patch: the widget is gone
+     because the user asked for it, and Alt+Shift+R is the way back. Say so instead of
+     reporting a FAIL that tells the owner something is wrong when nothing is. */
+  const panelScope = withChat.length ? withChat : answered;
+  const panelHidden = panelScope.length > 0 && panelScope.every((r) => r.applied && r.applied.panel === 0 && r.applied.panelSetting === false);
+  /* Windows where the code-size probe actually had an inline <code> to measure. That
+     element only exists when the conversation happens to contain code, so its absence
+     is a fact about the chat rather than about the patch — and a row that scored it as
+     PASS would be reporting an unmeasured feature as working. */
+  const codeShots = answered.filter((r) => r.controls && !r.controls.error && r.controls.codeBefore && r.controls.codeBefore.code);
   return [
     { name: "page targets visible over CDP", pass: reports.length > 0, detail: `${reports.length} target(s)` },
     { name: "probes answered", pass: !unknown && reports.length > 0, detail: unknown ? reports.map((r) => r.error).filter(Boolean).join(" / ") || "—" : `${answered.length}/${reports.length}` },
@@ -332,6 +401,29 @@ function verdictRows(reports) {
         })
         .join(" | ") || "—"
     ),
+    {
+      name: codeShots.length ? "code-size slider changes rendered inline code" : "code-size slider (no inline code rendered to measure)",
+      pass: codeShots.length
+        ? codeShots.some((r) => {
+            const a = r.controls.codeAfter;
+            const b = r.controls.codeBefore;
+            /* codeSize 6 is a 1.375 scale; allow for rounding and for a code island
+               whose box is clipped by its line. same(a, b) here is the anti-confound
+               claim: the drive may move the code box and nothing else. */
+            return !!a && !!a.code && a.code.w >= b.code.w * 1.2 && same(a, b);
+          })
+        : null,
+      detail: codeShots.length
+        ? codeShots
+            .map((r) => {
+              const b = r.controls.codeBefore.code;
+              const a = r.controls.codeAfter.code;
+              const c = r.controls;
+              return `${b.size}px code ${b.w}→${a.w}x${a.h}px at codeSize ${(r.settings && r.settings.codeSize) || 0}→6${same(c.settled, c.before) && codeRestored(c) ? "" : " (config NOT restored)"}`;
+            })
+            .join(" | ")
+        : answered.map((r) => (r.controls && r.controls.error ? `probe: ${r.controls.error}` : "no `[data-chat-message-text] :not(pre) > code` node in this conversation")).join(" | ") || "—"
+    },
     row(
       "chat DOM hooks reachable",
       ok((r) => r.hooks && Object.values(r.hooks).some((n) => n > 0)),
@@ -342,9 +434,9 @@ function verdictRows(reports) {
       ok((r) => r.applied && /smart|force/.test(r.applied.mode || "") && r.applied.vars > 0),
       answered.map((r) => `data-qrt-mode=${(r.applied && r.applied.mode) || "—"} vars=${r.applied ? r.applied.vars : "?"} fa=${r.applied ? r.applied.faBlocks : "?"} classes="${(r.applied && r.applied.htmlClasses) || ""}"`).join(" | ") || "—"
     ),
-    row(
-      "settings panel mounted, visible and bottom-right",
-      okChat((r) => {
+    {
+      name: panelHidden ? "settings panel hidden on purpose (Alt+Shift+R shows it)" : "settings panel mounted, visible and bottom-right",
+      pass: panelHidden || okChat((r) => {
         const a = r.applied && r.applied.panelAnchors;
         return (
           !!r.applied &&
@@ -362,15 +454,17 @@ function verdictRows(reports) {
           a.cornerClash.n === 0
         );
       }),
-      (withChat.length ? withChat : answered)
-        .map((r) => {
-          const p = r.applied || {};
-          const a = p.panelAnchors;
-          const clash = a && a.cornerClash ? (a.cornerClash.n === 0 ? "clear" : `over ${a.cornerClash.n}: ${a.cornerClash.what || "?"}`) : "trigger?";
-          return `nodes=${p.panel} size=${p.panelRect || "none"}${a ? ` ${a.bottomGap}px from the bottom, ${a.rightGap}px from the right (${a.flexDirection}, corner ${clash})` : " not mounted"}`;
-        })
-        .join(" | ") || "—"
-    )
+      detail: panelHidden
+        ? panelScope.map((r) => `config.panel=false on ${r.applied.panel} widget node(s)`).join(" | ")
+        : panelScope
+            .map((r) => {
+              const p = r.applied || {};
+              const a = p.panelAnchors;
+              const clash = a && a.cornerClash ? (a.cornerClash.n === 0 ? "clear" : `over ${a.cornerClash.n}: ${a.cornerClash.what || "?"}`) : "trigger?";
+              return `nodes=${p.panel} size=${p.panelRect || "none"}${a ? ` ${a.bottomGap}px from the bottom, ${a.rightGap}px from the right (${a.flexDirection}, corner ${clash})` : " not mounted"}`;
+            })
+            .join(" | ") || "—"
+    }
   ];
 }
 
@@ -379,9 +473,18 @@ function same(a, b) {
   return !!a && !!b && Math.abs(a.lineHeightPx - b.lineHeightPx) < 0.05 && Math.abs(a.zoom - b.zoom) < 0.001;
 }
 
-function hintsFor(rows) {
+/* ... including the code box, which same() cannot compare: the two shots it is handed
+   around the code drive differ there on purpose. */
+function codeRestored(c) {
+  const a = c.settled && c.settled.code;
+  const b = c.before && c.before.code;
+  return !a || !b || Math.abs(a.w - b.w) < 0.5;
+}
+
+function hintsFor(rows, reports = []) {
   const hints = [];
   const failed = rows.filter((r) => r.pass === false).map((r) => r.name);
+  const busyCount = reports.filter((r) => r.busy).length;
   if (failed.includes("chat DOM hooks reachable") && !failed.includes("payload injected (window.__QODER_RTL__)")) {
     hints.push("hooks=0 with the payload injected normally means that window has no conversation rendered — open a chat and re-run.");
   }
@@ -403,11 +506,22 @@ function hintsFor(rows) {
   if (failed.includes("panel sliders change the prose when applied")) {
     hints.push("the probe drives lineHeight/chatSize through the runtime and re-measures: no change means the var never reaches the text, 'probe: no runtime' means the payload is not the current version (restart the injector).");
   }
+  if (failed.some((n) => n.startsWith("code-size slider changes"))) {
+    hints.push("the code-size probe drives codeSize alone, from the user's own settings, and re-measures the inline <code> box: no change means Qoder pins code with font-size !important and the patch has to scale it with zoom instead of declaring a size; '(config NOT restored)' means the probe's cleanup did not put the box back.");
+  }
   if (failed.includes("settings panel mounted, visible and bottom-right")) {
     hints.push("nodes=0 → the widget was never mounted (check rtl.config.panel, or press Alt+Shift+R); nodes>0 with size=0x0 → something in the page hides or re-parents .qrt-widget; a large bottom-gap number → the widget is not anchored to the window edge, i.e. an older payload is still running; re-run the injector; a right-gap under 46 → the trigger overlaps Qoder's own corner help button and steals its clicks (the row prints 'over N: <classes>' for whatever it collides with).");
   }
-  if (rows.some((r) => r.pass === null)) {
-    hints.push("UNKNOWN rows are windows whose probe never answered (hidden/destroyed target); the patch itself may still be applied.");
+  const unknownRows = rows.filter((r) => r.pass === null).map((r) => r.name);
+  if (unknownRows.length) {
+    hints.push(`UNKNOWN row(s) — ${unknownRows.join("; ")} — were not measured, so they say nothing either way: a probe that never answered (hidden/destroyed target), or the code-size slider in a conversation that renders no inline <code>. The patch itself may still be applied.`);
+  }
+  if (busyCount) {
+    hints.push(`a window reported as "still being attached" had not finished its Page handshake when this ran${busyCount > 1 ? " (that is " + busyCount + " windows)" : ""} — run node live.js --check again a few seconds later for its own verdict rows.`);
+  }
+  const skipped = reports.filter((r) => r.skipped);
+  if (skipped.length) {
+    hints.push(`${skipped.length} window(s) listed above were never patched: their document did not answer the Page domain, so nothing could be injected into them. A --check run judges only the windows it reached; keep the injector running (node live.js without --check) and it retries them on every tick.`);
   }
   return hints;
 }
@@ -417,17 +531,27 @@ function formatReport(reports, rows, port) {
   const lines = [`# port ${port} — ${new Date().toISOString()}`];
   if (!reports.length) lines.push("(no page targets attached)");
   for (const r of reports) {
+    if (r.skipped) {
+      lines.push(
+        `- ${r.targetId}\n    url     ${r.url || "(empty)"}\n    state   NOT PATCHED — its document never answered the Page domain (${r.error}); watching runs retry it every tick`
+      );
+      continue;
+    }
+    if (r.busy) {
+      lines.push(`- ${r.targetId}\n    url     ${r.url || "(empty)"}\n    state   still being attached when this report ran — nothing was probed, so nothing here says the patch failed`);
+      continue;
+    }
     lines.push(
       `- ${r.targetId}\n    url     ${r.url}\n    patched ${r.patchedAt || "n/a"}${r.patchError ? " (error: " + r.patchError + ")" : ""}\n    version ${r.rtlVersion || r.error || "absent"}`,
       `    css     style=${r.styleTag} nodes=${r.styleCount} bytes=${r.styleBytes} font=${JSON.stringify(r.font || null)}`,
       `    hooks   ${JSON.stringify(r.hooks || {})}`,
-      `    prose   ${JSON.stringify((r.applied && r.applied.text) || {})} settings ${JSON.stringify(r.settings || {})}`,
+      `    prose   ${JSON.stringify((r.applied && r.applied.text) || {})} code ${JSON.stringify((r.applied && r.applied.code) || null)} settings ${JSON.stringify(r.settings || {})}`,
       `    applied ${JSON.stringify(r.applied || {})}`,
       ...(r.controls ? [`    controls ${JSON.stringify(r.controls)}`] : [])
     );
   }
   for (const row of rows) lines.push(`${mark(row.pass)}  ${row.name} (${row.detail})`);
-  for (const hint of hintsFor(rows)) lines.push(`note  ${hint}`);
+  for (const hint of hintsFor(rows, reports)) lines.push(`note  ${hint}`);
   return lines.join("\n");
 }
 
@@ -533,14 +657,20 @@ async function main() {
 
   const injector = new Injector(conn, flags);
   await injector.start();
-  console.log(`Injected into ${injector.sessions.size} window(s).`);
+  console.log(`Injected into ${injector.sessions.size} window(s).` + (injector.skipped.size ? ` ${injector.skipped.size} window(s) never answered the Page domain.` : ""));
 
   if (!flags.check) {
     console.log("Watching for new windows — leave this running (Ctrl+C to stop).");
-    console.log("The «ا» button at the top-right of the chat opens the settings panel; Alt+R toggles RTL, Alt+Shift+R shows or hides that button.");
+    console.log("The SVG button at the bottom-right of the chat opens the settings panel; Alt+R toggles RTL, Alt+Shift+R shows or hides that button.");
     console.log("Something looks off?  node live.js --diagnose   (read-only)");
     const tick = setInterval(() => {
-      injector.report().then((r) => say(flags, `  ${new Date().toLocaleTimeString()} ${r.length} live window(s)`), () => {});
+      /* Retry first, so a window whose document has now rendered is counted as the
+         patched window it has become rather than as a permanent skip. */
+      injector
+        .retrySkipped()
+        .catch((e) => say(flags, "  retry failed:", e.message))
+        .then(() => injector.report())
+        .then((r) => say(flags, `  ${new Date().toLocaleTimeString()} ${r.filter((x) => !x.skipped).length}/${r.length} window(s) patched`), () => {});
     }, 15000);
     conn.onclosed = () => {
       clearInterval(tick);

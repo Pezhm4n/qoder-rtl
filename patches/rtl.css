@@ -42,12 +42,12 @@
 }
 
 [data-chat-message-text] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, td, th, a, span, strong, em, b, i, label, figcaption, caption, summary),
-[data-chat-composer] :is([contenteditable="true"], textarea) {
+[data-chat-composer] :is([contenteditable="true"], textarea, [data-chat-composer-placeholder], [data-chat-composer-placeholder] *) {
   font-family: var(--qrt-stack) !important;
 }
 
 [data-chat-message-text] :is(p, li, dd, dt, blockquote, td, th, figcaption, caption, summary),
-[data-chat-composer] :is([contenteditable="true"], textarea) {
+[data-chat-composer] :is([contenteditable="true"], textarea, [data-chat-composer-placeholder]) {
   line-height: var(--qrt-leading) !important;
   /* Qoder's chat font-size setting pins the same property with a longer selector
      and !important, later in the cascade than any injected sheet; the runtime
@@ -57,8 +57,18 @@
 
 /* --------------------------------------------------------------- content */
 
-[data-chat-message-text] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, td, th, figcaption, caption, summary),
-[data-chat-composer] :is(textarea, [contenteditable="true"]) {
+/* [data-chat-composer-placeholder] is Qoder's ghost-text overlay: measured on the live
+   window, it is absolutely positioned over the editor with the app font, its own 24px
+   leading and an ltr box — so it read as a different typeface on the wrong side of the
+   line the caret was on. It is carried by the same rules as the editor itself, in every
+   mode, so it cannot drift from the text it stands in for. */
+/* Cells and captions are deliberately absent here: their RTL furniture belongs to the
+   tables switch, not to the prose switch, and this rule used to force `direction: rtl`
+   on every `<td>` regardless of that flag. Turning «RTL جدول‌ها» off therefore moved the
+   columns back to LTR and left the text inside them right-aligned — half a toggle.
+   See the `html[data-qrt-tables]` block below, which owns table furniture as a unit. */
+[data-chat-message-text] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, figcaption, summary),
+[data-chat-composer] :is(textarea, [contenteditable="true"], [data-chat-composer-placeholder]) {
   unicode-bidi: plaintext;
   text-align: start;
   direction: rtl;
@@ -74,43 +84,54 @@
    owns <html class="…"> and rewrites it, which would silently drop a class-based
    switch. The runtime mirrors them as qrt-* classes for debugging only. */
 
-/* smart mode: qrt-fa / qrt-en are set by the runtime script per block */
-html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt).qrt-en {
+/* smart mode: qrt-fa / qrt-en are set by the runtime script per block. Every tag the base
+   RTL rule above pins has to appear in these two lists as well — a tag that is forced RTL
+   but never classified is precisely the 1.4.0 bug (an English figure caption sitting
+   right-aligned with no class to argue with), and test/live.js checks that invariant. */
+html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-en {
   direction: ltr;
   text-align: left;
 }
 
-html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt).qrt-fa {
+html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-fa {
   direction: rtl;
   text-align: right;
 }
 
-html[data-qrt-mode="smart"] [data-chat-message-text] :is(ul, ol):has(> .qrt-en) {
+/* A list whose items are all Latin flips wholesale. A mixed list does not: its markers
+   stay on the reading-start side of the RTL page and each item carries its own
+   direction. Every Latin item now carries .qrt-en, so the older :has(> .qrt-en) alone
+   would have flipped a list that only has one English line in it. */
+html[data-qrt-mode="smart"] [data-chat-message-text] :is(ul, ol):has(> .qrt-en):not(:has(> .qrt-fa)) {
   direction: ltr;
 }
 
 /* force mode pins every prose block to RTL */
 html[data-qrt-mode="force"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
-html[data-qrt-mode="force"] [data-chat-composer] :is(textarea, [contenteditable="true"]) {
+html[data-qrt-mode="force"] [data-chat-composer] :is(textarea, [contenteditable="true"], [data-chat-composer-placeholder]) {
   direction: rtl !important;
   text-align: right !important;
 }
 
-html[data-qrt-mode="off"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, td, th),
-html[data-qrt-mode="off"] [data-chat-composer] :is(textarea, [contenteditable="true"]) {
+html[data-qrt-mode="off"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, td, th, figcaption, caption, summary),
+html[data-qrt-mode="off"] [data-chat-composer] :is(textarea, [contenteditable="true"], [data-chat-composer-placeholder]) {
   direction: ltr !important;
   text-align: left !important;
   unicode-bidi: normal !important;
 }
 
-/* lists: marker has to sit on the reading-start side */
-[data-chat-message-text] :is(ul, ol) {
+/* lists: marker has to sit on the reading-start side. Scoped to the modes that put the
+   text in RTL: unscoped, "خاموش" left the bullets on the right of left-aligned Latin
+   items, because the list element itself is not in the override list above. */
+html[data-qrt-mode="smart"] [data-chat-message-text] :is(ul, ol),
+html[data-qrt-mode="force"] [data-chat-message-text] :is(ul, ol) {
   direction: rtl;
   padding-inline-start: 1.5em;
   list-style-position: inside;
 }
 
-[data-chat-message-text] blockquote {
+html[data-qrt-mode="smart"] [data-chat-message-text] blockquote,
+html[data-qrt-mode="force"] [data-chat-message-text] blockquote {
   border-inline-start-width: 2px;
   border-inline-end-width: 0;
   border-left-width: 0;
@@ -121,25 +142,29 @@ html[data-qrt-mode="off"] [data-chat-composer] :is(textarea, [contenteditable="t
 
 /* ---------------------------------------------------------------- tables */
 
+/* One switch owns the whole table. `direction` on the `<table>` decides the column
+   order, and the cells need their own RTL furniture: alignment and marker side follow
+   the table, not the page. Both halves are gated on `data-qrt-tables` so that turning
+   «RTL جدول‌ها» off returns a table to exactly what the app renders. */
 html[data-qrt-tables] [data-chat-message-text] table {
   direction: rtl;
 }
 
-[data-chat-message-text] :is(th, td) {
+html[data-qrt-tables] [data-chat-message-text] :is(th, td, caption) {
+  direction: rtl;
   text-align: start;
   unicode-bidi: plaintext;
 }
 
-/* opt-in: mirror column order (cells keep their own text direction) */
+/* opt-in: mirror the column order back. Column order is decided by the direction on the
+   TABLE element alone, so this rule targets the table and leaves the cells to the rules
+   above. The older rule missed that: it re-set `direction: rtl` on a table that was
+   already rtl, so the toggle moved no column at all (measured: the first header stayed
+   on the right), and pinned the cells to ltr on the side — which changed nothing you
+   could see either, because `unicode-bidi: plaintext` takes the base direction from the
+   content and the rule also spelled text-align out. The whole feature was a no-op. */
 html[data-qrt-reverse] [data-chat-message-text] table {
-  display: table;
-  direction: rtl;
-}
-
-html[data-qrt-reverse] [data-chat-message-text] :is(th, td) {
   direction: ltr;
-  unicode-bidi: plaintext;
-  text-align: right;
 }
 
 /* ------------------------------------------------------------ LTR islands */
@@ -155,7 +180,19 @@ html[data-qrt-reverse] [data-chat-message-text] :is(th, td) {
   text-align: left !important;
   unicode-bidi: isolate !important;
   font-family: var(--qrt-code) !important;
-  font-size: calc(1em * var(--qrt-code-scale));
+}
+
+/* «اندازهٔ فونت کد» scales these islands rather than declaring a size for them. Measured
+   on the live window: an inline `<code>` computes 12px inside a 13px `<p>`, and the
+   `font-family` two lines above reaches it only because that declaration is `!important` —
+   the plain `font-size` that used to sit in the same block never did, so the slider moved
+   nothing. Scaling wins that argument without fighting it: it multiplies whatever size the
+   app chose, and at 0 it leaves the app's own code size exactly as it is.
+   Deliberately only the code-ish tags: `.monaco-editor`/`.cm-editor`/`.xterm` measure
+   pixels for their own layout and would take a second zoom badly. */
+[data-chat-message-text] :is(pre, code, kbd, samp, var, output),
+[data-chat-composer] :is(code, pre, kbd, samp) {
+  zoom: var(--qrt-code-scale);
 }
 
 /* inline code inside an RTL paragraph must not drag neighbouring punctuation */

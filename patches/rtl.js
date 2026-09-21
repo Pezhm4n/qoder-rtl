@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.3.0";
+  var VERSION = "1.8.0";
   var STORE_KEY = "qoder_persian_rtl_config_v1";
   if (typeof window === "undefined" || typeof document === "undefined") return;
   var previous = window.__QODER_RTL__;
@@ -22,7 +22,15 @@
 
   var FA_RE = /[؀-ۿݐ-ݿﭐ-﷿ﹰ-﻿]/g;
   var LATIN_RE = /[A-Za-zÀ-ɏ]/g;
+  /* Zero-width and bidi-format code points carry no language, but U+FEFF falls
+     inside FA_RE (the Arabic presentation-forms ranges run up to it), so a couple
+     of BOMs left by copy-pasted markdown used to outvote a Latin sentence. */
+  var FORMAT_RE = /[\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g;
   var CODE_ANCHOR = "pre,code,kbd,samp,var,textarea,input,.monaco-editor,.cm-editor,.xterm,[data-code-editor]";
+  /* The stylesheet forces these LTR and bidi-isolated, so their contents must not
+     decide the direction of the prose around them. */
+  var LTR_ONLY_TAGS = /^(CODE|KBD|SAMP|VAR|PRE)$/;
+  var NESTED_BLOCK_TAGS = /^(P|UL|OL|TABLE|DIV|SECTION)$/;
   var BLOCK_SELECTOR = [
     "[data-chat-message-text] p",
     "[data-chat-message-text] li",
@@ -34,11 +42,19 @@
     "[data-chat-message-text] h5",
     "[data-chat-message-text] h6",
     "[data-chat-message-text] dd",
-    "[data-chat-message-text] dt"
+    "[data-chat-message-text] dt",
+    /* A tag the base RTL rule pins has to be classifiable, or an English caption/summary
+       sits right-aligned with no .qrt-en to hand it back — the tables cells are exempt
+       because the tables switch, not the classifier, owns them. */
+    "[data-chat-message-text] figcaption",
+    "[data-chat-message-text] summary"
   ].join(",");
 
-  /* Body prose whose leading the panel controls — the same set rtl.css repeats the
-     line-height for (headings keep their own rhythm). */
+  /* Body prose whose leading the panel controls. This list is the inline-stamping half of
+     the CSS rule that ends in `line-height: var(--qrt-leading) !important` — the stamp is
+     what beats Qoder's own `!important` pin, so any tag carried by that rule has to appear
+     here too or it keeps the app's value while the rest of the message follows the slider.
+     (Headings keep their own rhythm and are in neither list.) */
   var LEAD_SELECTOR = [
     "[data-chat-message-text] p",
     "[data-chat-message-text] li",
@@ -47,8 +63,12 @@
     "[data-chat-message-text] blockquote",
     "[data-chat-message-text] td",
     "[data-chat-message-text] th",
-    "[data-chat-composer][contenteditable]",
-    "[data-chat-composer] [contenteditable]"
+    "[data-chat-message-text] caption",
+    "[data-chat-message-text] figcaption",
+    "[data-chat-message-text] summary",
+    "[data-chat-composer] [contenteditable]",
+    "[data-chat-composer] textarea",
+    "[data-chat-composer] [data-chat-composer-placeholder]"
   ].join(",");
 
   var defaults = {
@@ -92,11 +112,16 @@
   }
 
   function reset() {
-    cfg = Object.assign({}, defaults);
+    /* Mutate in place instead of rebinding: window.__QODER_RTL__.config holds a
+       reference to this object, so a rebind leaves the exported handle — and every
+       probe that reads it — reporting the pre-reset values forever. */
+    for (var k in defaults) cfg[k] = defaults[k];
   }
 
   function quoted(name) {
-    return '"' + String(name).replace(/"/g, "").trim() + '"';
+    /* A typed family name goes straight into a CSS string. Without the backslash,
+       "Arial\" closes the declaration early and silently kills the whole stack. */
+    return '"' + String(name).replace(/["\\\r\n]/g, "").trim() + '"';
   }
 
   function fontStack(base) {
@@ -109,9 +134,10 @@
 
   function isFa(text) {
     if (!text) return false;
-    var fa = (text.match(FA_RE) || []).length;
+    var t = text.replace(FORMAT_RE, " ");
+    var fa = (t.match(FA_RE) || []).length;
     if (!fa) return false;
-    var en = (text.match(LATIN_RE) || []).length;
+    var en = (t.match(LATIN_RE) || []).length;
     return fa >= 2 && fa > en * 0.5;
   }
 
@@ -124,6 +150,16 @@
       tables: on && !!cfg.tables,
       reverse: on && !!cfg.reverseColumns
     };
+  }
+
+  /* rtl and mode==="off" describe the same fact twice, and the two UI paths that write
+     them used to disagree: clearing the switch set mode to off, but switching it back
+     on left mode off — so the main toggle read ON while nothing was right-aligned.
+     Every path that turns direction on or off goes through here instead. */
+  function setDirection(on) {
+    cfg.rtl = on;
+    if (!on) cfg.mode = "off";
+    else if (cfg.mode === "off") cfg.mode = "smart";
   }
 
   function setFlag(root, name, on) {
@@ -142,19 +178,17 @@
      Specificity would be an arms race with the next Qoder release; inline wins. */
   function applyLeading() {
     if (!document.body) return;
-    var on = !!cfg.rtl && cfg.mode !== "off";
-    var want = on ? String(Number(cfg.lineHeight) || 1.75) : "";
+    /* Deliberately not gated on the direction switches: leading is typography, and the
+       text size beside it already applies in every mode. Measured on the live app,
+       gating it made the slider stop half-way through the prose — Qoder's 24px pin took
+       the paragraphs back while list items kept ours, so one message showed two rhythms. */
+    var want = String(Number(cfg.lineHeight) || 1.75);
     var nodes = document.body.querySelectorAll(LEAD_SELECTOR);
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
-      if (want) {
-        if (el.getAttribute("data-qrt-lead") !== want) {
-          el.style.setProperty("line-height", want, "important");
-          el.setAttribute("data-qrt-lead", want);
-        }
-      } else if (el.hasAttribute("data-qrt-lead")) {
-        el.style.removeProperty("line-height");
-        el.removeAttribute("data-qrt-lead");
+      if (el.getAttribute("data-qrt-lead") !== want) {
+        el.style.setProperty("line-height", want, "important");
+        el.setAttribute("data-qrt-lead", want);
       }
     }
   }
@@ -179,13 +213,20 @@
       ? quoted(cfg.codeFont) + ',ui-monospace,"Cascadia Mono",Consolas,monospace'
       : 'ui-monospace,"Cascadia Mono",Consolas,monospace';
 
+    /* Every declaration here is !important on purpose, and not for the usual reason.
+       rtl.css also declares these properties on :root, with their defaults, so whichever
+       of the two sheets sits later in <head> wins. That order is not stable: when the app
+       drops only style[data-qoder-rtl], the repair re-appends it at the end of <head> —
+       behind this node — and the defaults silently take over: the text-size zoom returns
+       to 1 and a typed font family disappears, permanently, for the rest of the session.
+       Measured on the fixture: {zoom:"1", face:"Vazirmatn QRT, Segoe …"} after one repair. */
     style.textContent =
       ":root{" +
-      "--qrt-code:" + codeFont + ";" +
-      "--qrt-zoom:" + (1 + (Number(cfg.chatSize) || 0) / 16).toFixed(4) + ";" +
-      "--qrt-code-scale:" + (1 + (Number(cfg.codeSize) || 0) / 16).toFixed(3) + ";" +
-      "--qrt-leading:" + (Number(cfg.lineHeight) || 1.75) + ";" +
-      "--qrt-stack:" + fontStack('"Segoe UI",Tahoma,"Iranian Sans",sans-serif') + ";" +
+      "--qrt-code:" + codeFont + " !important;" +
+      "--qrt-zoom:" + (1 + (Number(cfg.chatSize) || 0) / 16).toFixed(4) + " !important;" +
+      "--qrt-code-scale:" + (1 + (Number(cfg.codeSize) || 0) / 16).toFixed(3) + " !important;" +
+      "--qrt-leading:" + (Number(cfg.lineHeight) || 1.75) + " !important;" +
+      "--qrt-stack:" + fontStack('"Segoe UI",Tahoma,"Iranian Sans",sans-serif') + " !important;" +
       "}";
 
     var f = rootFlags();
@@ -213,34 +254,75 @@
     );
   }
 
+  /* Root attributes are not the only thing the styles live on. If any injected <style>
+     goes away — the app re-rendering <head>, an extension, anything — the CSS custom
+     properties collapse with it: the font falls back to system-ui, zoom returns to 1 and
+     the leading drops, while every root flag still reads correct. That failure is silent
+     and permanent, because applyConfig() only ever ran when the root drifted.
+     The main sheet is checked only when the prelude published its installer (the CDP
+     route); the asar route loads it from a file and has no such node to lose. */
+  function nodesDrifted() {
+    if (!document.getElementById("qoder-rtl-vars") || !document.getElementById("qoder-rtl-panel-style")) return true;
+    return typeof window.__QRT_CSS__ === "function" && !document.querySelector("style[data-qoder-rtl]");
+  }
+
+  function repair() {
+    if (!rootStateDrifted() && !nodesDrifted()) return;
+    if (typeof window.__QRT_CSS__ === "function" && !document.querySelector("style[data-qoder-rtl]")) window.__QRT_CSS__();
+    ensurePanelStyle();
+    applyConfig();
+  }
+
   /* ---------------------------------------------------------------- bidi walk */
 
   var pending = false;
 
   function ownText(el) {
     var buf = "";
+    var onlyIsolated = false;
     for (var c = el.firstChild; c; c = c.nextSibling) {
       if (c.nodeType === 3) buf += c.data;
-      else if (c.nodeType === 1 && !/^(P|UL|OL|TABLE|PRE|DIV|SECTION)$/.test(c.tagName)) buf += c.textContent || "";
+      else if (c.nodeType !== 1) continue;
+      else if (LTR_ONLY_TAGS.test(c.tagName)) onlyIsolated = true;
+      else if (!NESTED_BLOCK_TAGS.test(c.tagName)) buf += c.textContent || "";
     }
-    return buf || el.textContent || "";
+    /* Inline code is pinned LTR by the stylesheet, so naming three identifiers used to
+       outvote the Persian sentence around them and left-align it. When nothing is left
+       to judge, an empty string means "not Persian" — which is right for a code-only
+       block, and the textContent fallback keeps covering the odd wrapper element. */
+    return buf || (onlyIsolated ? "" : el.textContent || "");
   }
 
   function markBlocks() {
-    if (!document.body || (cfg.mode !== "smart" && cfg.mode !== "force")) return;
+    if (!document.body) return;
+    /* Nothing reads .qrt-fa/.qrt-en while direction is off, so leaving the marks from
+       the last active mode on the prose makes the debug mirror (and any probe that
+       counts them) claim an RTL state the page does not show. */
+    if (cfg.mode !== "smart" && cfg.mode !== "force") {
+      clearMarks();
+      return;
+    }
     var nodes = document.body.querySelectorAll(BLOCK_SELECTOR);
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
       if (el.closest && el.closest(CODE_ANCHOR)) continue;
       var own = ownText(el);
       var want = cfg.mode === "force" ? true : isFa(own);
-      if (want && !el.classList.contains("qrt-fa")) {
-        el.classList.add("qrt-fa");
-        el.classList.remove("qrt-en");
-      } else if (!want && el.classList.contains("qrt-fa")) {
-        el.classList.remove("qrt-fa");
-        el.classList.add("qrt-en");
-      }
+      /* Both classes are stamped every pass. Only adding qrt-fa meant a Latin block
+         that had never been Persian carried no class at all, so it fell back to the
+         base RTL rule and showed right-aligned English — measured in the browser test.
+         classList.toggle with an explicit force does not touch an already-correct
+         element, so re-running this on every frame costs nothing. */
+      el.classList.toggle("qrt-fa", want);
+      el.classList.toggle("qrt-en", !want);
+    }
+  }
+
+  function clearMarks() {
+    var nodes = document.querySelectorAll(".qrt-fa, .qrt-en");
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].classList.remove("qrt-fa");
+      nodes[i].classList.remove("qrt-en");
     }
   }
 
@@ -291,6 +373,15 @@
   /* --------------------------------------------------------------- shortcuts */
 
   var onGlobalKey = function (ev) {
+    /* Escape closes the panel the way every other popup in the app does, and hands
+       focus back to the button it was opened from. It does not cancel the key: the
+       app may own Escape too, and a popover disappearing is not a reason to swallow
+       whatever the page wanted to do with it. */
+    if (ev.key === "Escape" && open) {
+      setOpen(false);
+      if (triggerEl) triggerEl.focus();
+      return;
+    }
     if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.code !== "KeyR") return;
     var t = ev.target;
     if (t && t.closest && t.closest(".qrt-widget")) return;
@@ -300,8 +391,9 @@
     if (ev.shiftKey) {
       cfg.panel = !cfg.panel;
     } else {
-      cfg.rtl = !cfg.rtl;
-      if (cfg.rtl && cfg.mode === "off") cfg.mode = "smart";
+      /* Toggle what the page actually shows, not the stored flag: with mode==="off"
+         the patch is off whatever rtl says, and Alt+R had to be pressed twice. */
+      setDirection(!(cfg.rtl && cfg.mode !== "off"));
       markBlocks();
     }
     save();
@@ -312,6 +404,23 @@
   document.addEventListener("keydown", onGlobalKey);
   addDisposable(function () {
     document.removeEventListener("keydown", onGlobalKey);
+  });
+
+  /* Qoder can keep more than one rendered window on the same origin, and localStorage
+     is shared while each document keeps its own copy of cfg. Without this, moving a
+     slider in one window left the other showing — and applying — the old settings. */
+  var onStorage = function (ev) {
+    if (ev && ev.key && ev.key !== STORE_KEY) return;
+    var next = load();
+    for (var k in next) cfg[k] = next[k];
+    applyConfig();
+    markBlocks();
+    mount();
+    syncInputs();
+  };
+  window.addEventListener("storage", onStorage);
+  addDisposable(function () {
+    window.removeEventListener("storage", onStorage);
   });
 
   /* ------------------------------------------------------------- settings UI */
@@ -352,11 +461,13 @@
     i.type = "checkbox";
     i.className = "qrt-toggle";
     i.addEventListener("change", function () {
-      cfg[key] = i.checked;
-      if (key === "rtl" && !i.checked) cfg.mode = "off";
+      if (key === "rtl") setDirection(i.checked);
+      else cfg[key] = i.checked;
       save();
       applyConfig();
       markBlocks();
+      /* setDirection can move `mode`, and the mode dropdown has to show that. */
+      syncInputs();
     });
     els[key] = i;
     return i;
@@ -395,10 +506,14 @@
     });
     s.addEventListener("change", function () {
       cfg[key] = s.value;
-      if (key === "mode" && s.value !== "off") cfg.rtl = true;
+      /* The switch and the dropdown are two names for one decision, so both are
+         written together: picking خاموش clears the master switch too, otherwise the
+         next click on it would resurrect a mode the user had just turned off. */
+      if (key === "mode") setDirection(s.value !== "off");
       save();
       applyConfig();
       markBlocks();
+      syncInputs();
     });
     els[key] = s;
     return s;
@@ -422,8 +537,12 @@
     for (var key in els) {
       var node = els[key];
       if (!node) continue;
-      if (node.type === "checkbox") node.checked = !!cfg[key];
-      else if (node.type === "range") {
+      if (node.type === "checkbox") {
+        /* The direction switch reports the effective state: rtl can still be true while
+           the mode dropdown says off, and a switch reading ON over a page that is not
+           right-aligned is the bug this hides. */
+        node.checked = key === "rtl" ? !!cfg.rtl && cfg.mode !== "off" : !!cfg[key];
+      } else if (node.type === "range") {
         node.value = cfg[key];
         if (els[key + "_out"]) els[key + "_out"].textContent = cfg[key];
       } else if (node.tagName === "SELECT" || node.type === "text") node.value = cfg[key];
@@ -458,6 +577,7 @@
     trigger.type = "button";
     trigger.appendChild(triggerIcon());
     trigger.setAttribute("aria-expanded", "false");
+    trigger.setAttribute("aria-haspopup", "dialog");
     trigger.setAttribute("aria-controls", "qoder-rtl-panel");
     trigger.title = "تنظیمات فارسی / RTL — Alt+R برای جهت، Alt+Shift+R برای نمایش/پنهان‌کردن این پنل";
     trigger.addEventListener("click", function () {
@@ -466,6 +586,8 @@
 
     var panel = el("div", "qrt-panel");
     panel.id = "qoder-rtl-panel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "تنظیمات متن فارسی");
     panel.inert = true;
     panel.appendChild(el("div", "qrt-title", "تنظیمات متن فارسی"));
     panel.appendChild(row("راست‌چین فعال", toggle("rtl")));
@@ -535,6 +657,9 @@
   function mount() {
     if (!document.body) return;
     if (!cfg.panel) {
+      /* The shell object survives hiding, so an open panel would otherwise come back
+         already expanded — with its sliders live in the tab order — on the next show. */
+      setOpen(false);
       if (shell && shell.parentNode) shell.parentNode.removeChild(shell);
       return;
     }
@@ -612,8 +737,11 @@
     markBlocks();
 
     var observer = new MutationObserver(function () {
-      if (rootStateDrifted()) applyConfig();
-      if (cfg.panel && !shell) mount();
+      repair();
+      /* Same containment test the safety tick uses: the app can detach the subtree the
+         widget hangs from while it re-renders a streaming reply, and waiting for the
+         4s tick left the button gone for seconds in the middle of an answer. */
+      if (cfg.panel && (!shell || !document.body.contains(shell))) mount();
       scheduleMark();
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
@@ -622,7 +750,7 @@
     });
 
     var tick = setInterval(function () {
-      if (rootStateDrifted()) applyConfig();
+      repair();
       if (cfg.panel && (!shell || !document.body.contains(shell))) mount();
       scheduleMark();
     }, 4000);
@@ -661,6 +789,9 @@
       save();
       applyConfig();
       markBlocks();
+      /* mount(): panel is a setting like the others, and driving the runtime through
+         apply() has to show or hide the widget the way the shortcut key does. */
+      mount();
       syncInputs();
     },
     dispose: dispose

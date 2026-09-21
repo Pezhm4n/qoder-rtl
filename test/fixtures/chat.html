@@ -44,6 +44,16 @@
       .text-text {
         color: #e6e6e6;
       }
+      /* Measured on the live window with a read-only probe: an inline <code> computes
+         12px inside a 13px <p>. What was identified is not the selector that wins there
+         but the half of our own rule block that loses — the !important font-family
+         reaches that element and a plain font-size beside it does not. Pinning the size
+         the strongest way an app sheet can outrank us is what keeps the code-size test
+         honest: a patch that *declares* a code size cannot move this number, and one
+         that *scales* it can. */
+      .markdown-body code {
+        font-size: 12px !important;
+      }
       /* Qoder's own chat font-size setting, read live out of the browser with
          CSS.getMatchedStylesForNode. It pins the same two properties with
          !important and a much longer selector, so a container-level or even an
@@ -62,6 +72,22 @@
       th {
         border: 1px solid #333;
         padding: 4px 10px;
+      }
+      /* The composer's ghost text, measured live: Qoder absolutely positions an
+         aria-hidden overlay over the editor and gives it the app font stack and its
+         own 24px line-height. Nothing in the stylesheet above reaches it, so without
+         the patch the placeholder sits on the left in a different face from the line
+         the caret is on, and the first keystroke jumps. */
+      [data-chat-composer-placeholder] {
+        position: absolute;
+        inset: 0;
+        font-family: -apple-system, system-ui, sans-serif;
+        line-height: 24px;
+        color: #6b6b6b;
+        pointer-events: none;
+      }
+      [data-chat-composer-editor-shell] {
+        position: relative;
       }
       /* Qoder's floating help button, measured live at bottom-4.5/right-4.5 with a
          28px box (rect 1274,754,28x28 in a 1320x800 window). The settings trigger is
@@ -88,26 +114,91 @@
           <div data-chat-message-text data-part-type="text">
             <div class="markdown-body">
               <p class="my-0 text-sm leading-6 text-text">این یک پاراگراف فارسی است که باید از راست به چپ خوانده شود، همراه با یک عبارت انگلیسی مثل "hello world" در وسط متن.</p>
+              <!-- Qoder pins li with the same !important rule as p, and the smart mode
+                       has to tell a Persian item from an English one sitting under it. -->
+              <ul class="my-0">
+                <li class="my-0 text-sm leading-6 text-text">این یک موردِ فهرست فارسی است و باید راست‌چین بماند.</li>
+                <li class="my-0 text-sm leading-6 text-text">an English list item right below it stays left-aligned</li>
+              </ul>
+              <!-- A list with nothing but Latin in it is the case that has to flip over
+                       completely, and the blockquote is the other element whose border and
+                       padding are RTL furniture rather than typography. -->
+              <ol class="my-0">
+                <li class="my-0 text-sm leading-6 text-text">First English item</li>
+                <li class="my-0 text-sm leading-6 text-text">Second English item</li>
+              </ol>
+              <blockquote class="my-0 text-sm leading-6 text-text">نقل‌قولی که باید حاشیهٔ سمت راست داشته باشد.</blockquote>
+              <!-- Persian prose that happens to name four identifiers. The classifier
+                       weighs one Latin letter as half a Persian one, so 45 identifier
+                       letters outvoted the 18 Persian ones and left-aligned the sentence —
+                       even though the patch pins inline code LTR anyway, which is exactly
+                       why its contents must not speak for the block around them. -->
+              <p id="t-code-heavy" class="my-0 text-sm leading-6 text-text">از <code>useReducer</code> به‌جای <code>useState</code> در <code>dispatchAction</code> و <code>createContext</code> استفاده کن.</p>
+              <!-- Nothing but code: still no prose left to judge, and it must stay LTR. -->
+              <p id="t-code-only" class="my-0 text-sm leading-6 text-text"><code>npm run test:browser</code></p>
+              <!-- U+FEFF (zero-width no-break space) falls inside the Arabic
+                       presentation-forms range the classifier counts as Persian, so four
+                       of them — what copy-pasted markdown leaves behind — outvoted the
+                       five Latin letters of this line and made it right-aligned. Written
+                       as entities so the fixture source stays readable. -->
+              <p id="t-bom" class="my-0 text-sm leading-6 text-text">&#xFEFF;&#xFEFF;&#xFEFF;&#xFEFF;hello</p>
+              <!-- Column order is set by the direction on the TABLE element, so these ids
+                       are what lets the browser test measure whether the reverse-columns
+                       toggle moves a column at all instead of only rewriting CSS text. -->
               <table>
+                <caption id="t-caption">جدول سرعت</caption>
                 <thead>
                   <tr>
-                    <th>ستون</th>
-                    <th>مقدار</th>
+                    <th id="t-col-a">ستون</th>
+                    <th id="t-col-b">مقدار</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td>سرعت</td>
-                    <td>۱۲۰ کیلومتر</td>
+                    <td id="t-cell-a">سرعت</td>
+                    <td id="t-cell-b">۱۲۰ کیلومتر</td>
                   </tr>
                 </tbody>
               </table>
+              <!-- figcaption and summary are prose the base rule pins RTL, so smart mode
+                   has to classify them like any paragraph: the Latin one below used to be
+                   right-aligned with no class at all, which is the same bug the classifier
+                   fix removed for <p>. They also carry the leading stamp, so the ids let
+                   the browser test read both verdicts and the computed ratio. -->
+              <figure>
+                <figcaption id="t-fig-fa">شکل ۱: سرعت مجاز در بزرگراه</figcaption>
+              </figure>
+              <figure>
+                <figcaption id="t-fig-en">Figure 1: allowed highway speed</figcaption>
+              </figure>
+              <details>
+                <summary id="t-sum-en">Show the raw numbers</summary>
+                <p>عددهای خام در جدول بالا هستند.</p>
+              </details>
               <pre><code>const x = 1; // این کامنت نباید به هم بریزد</code></pre>
             </div>
           </div>
         </div>
       </div>
-      <div data-chat-composer contenteditable="true">متن ورودی فارسی</div>
+      <div data-chat-composer data-e2e="chat.composer">
+        <div data-chat-composer-resizable-content>
+          <div data-chat-composer-editor-shell>
+            <div
+              class="loop-rich-editor"
+              contenteditable="true"
+              role="textbox"
+              aria-label="Send task message"
+              data-editor-render-key="1"
+            >متن ورودی فارسی</div>
+            <!-- The overlay is a sibling, not styled text inside the editor: it needs
+                     the same direction, font and leading or the ghost text and the caret
+                     line disagree. -->
+            <div data-chat-composer-placeholder aria-hidden="true">
+              <div>PLACEHOLDER FIXTURE ROW</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <script>
       /* Imitates Qoder's renderer, which owns <html class="…"> and rewrites it
