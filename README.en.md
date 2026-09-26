@@ -5,8 +5,8 @@
 **Read and write Persian and Arabic in the Qoder desktop chat — without touching a single installed file, without breaking auto-updates, and with Vazirmatn bundled offline.**
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/qoder-persian-rtl"><img alt="npm" src="https://img.shields.io/npm/v/qoder-persian-rtl?style=flat-square&label=npm&labelColor=1f2328&color=0d7a5f"></a>
-  <a href="https://www.npmjs.com/package/qoder-persian-rtl"><img alt="downloads" src="https://img.shields.io/npm/dm/qoder-persian-rtl?style=flat-square&label=downloads&labelColor=1f2328&color=2f6feb"></a>
+  <a href="https://www.npmjs.com/package/qoder-rtl"><img alt="npm" src="https://img.shields.io/npm/v/qoder-rtl?style=flat-square&label=npm&labelColor=1f2328&color=0d7a5f"></a>
+  <a href="https://www.npmjs.com/package/qoder-rtl"><img alt="downloads" src="https://img.shields.io/npm/dm/qoder-rtl?style=flat-square&label=downloads&labelColor=1f2328&color=2f6feb"></a>
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A5%2022-339933?style=flat-square&labelColor=1f2328&logo=node.js&logoColor=white">
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-red?style=flat-square&labelColor=1f2328"></a>
   <img alt="install files untouched" src="https://img.shields.io/badge/installed_files-untouched-brightgreen?style=flat-square&labelColor=1f2328">
@@ -62,7 +62,7 @@ Qoder enforces a single instance: if it is already running, a fresh launch hands
 ### 2) One command
 
 ```powershell
-npx qoder-persian-rtl
+npx qoder-rtl
 ```
 
 Qoder starts and the patch is injected into every window. Keep the terminal open: while it runs, new windows are patched automatically. `Ctrl+C` (or closing it) hands the window back to stock Qoder.
@@ -72,13 +72,13 @@ Qoder starts and the patch is injected into every window. Keep the terminal open
 ### 3) Confirm it actually landed
 
 ```powershell
-npx qoder-persian-rtl check
+npx qoder-rtl check
 ```
 
 Fifteen `PASS/FAIL` lines, most of them **measurements of rendered output** (the computed font of a real paragraph, its line height, whether reversing columns moved a column, how far the panel sits from the window edge) rather than "does a file exist". A line that reports `UNSURE` means that feature had nothing on screen to measure — not that it works.
 
 <a id="rerun"></a>
-> **Re-run it after every Qoder start.** That is inherent to live injection: nothing is written to disk, so nothing survives a restart. Want a double-click instead? `npx qoder-persian-rtl launcher` writes one `Qoder-RTL.cmd` (`remove-launcher` deletes it).
+> **Re-run it after every Qoder start.** That is inherent to live injection: nothing is written to disk, so nothing survives a restart. Want a double-click instead? `npx qoder-rtl launcher` writes one `Qoder-RTL.cmd` (`remove-launcher` deletes it).
 
 ---
 
@@ -87,7 +87,7 @@ Fifteen `PASS/FAIL` lines, most of them **measurements of rendered output** (the
 
 | Command | What it does |
 |---|---|
-| `qoder-persian-rtl` (no argument) | Connect or launch, inject, and keep the patch alive until `Ctrl+C` |
+| `qoder-rtl` (no argument) | Connect or launch, inject, and keep the patch alive until `Ctrl+C` |
 | `qoder-rtl check` | Inject + the fifteen-line audit + a log file in `%LOCALAPPDATA%\qoder-persian-rtl\cdp-test.log` |
 | `qoder-rtl diagnose` | Read-only: what every text block actually **computed** to — the answer to "why is this line not RTL?" |
 | `qoder-rtl status` | Tool and payload version, Qoder version, and what the debug port really reports |

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **qoder-persian-rtl** are documented here. The format follows
+All notable changes to **qoder-rtl** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the package version follows
 [Semantic Versioning](https://semver.org/).
 
@@ -29,6 +29,10 @@ Payload **1.8.3**.
 - The ghost placeholder keeps its own verdict — that half of 1.11.0 was correct and stays.
 
 ### Changed
+- The npm package is named **`qoder-rtl`**, matching the repository
+  (`github.com/Pezhm4n/qoder-rtl`) and the shorter `npx qoder-rtl`. The `qoder-persian-rtl` bin
+  still works after install, and the tool's data folder keeps its existing name
+  (`%LOCALAPPDATA%\qoder-persian-rtl`), so logs and settings do not move.
 - The fifteenth audit line scores the editor on `rtl` + per-line plaintext instead of on a
   direction class, and prints `editor=rtl/per-line`.
 
@@ -81,7 +85,7 @@ Payload unchanged (1.8.0). This release is about how the tool is reached and how
 failure output is.
 
 ### Added
-- A `qoder-rtl` bin and `cli.js` wrapping the engine, so `npx qoder-persian-rtl` is one
+- A `qoder-rtl` bin and `cli.js` wrapping the engine, so `npx qoder-rtl` is one
   command: `start`, `check`, `diagnose`, `list`, `status`, `launcher`, `remove-launcher`.
 - **Zero dependencies on the CDP path** — `@electron/asar` moved to `devDependencies`, so
   what is downloaded is the package, not 6.8 MB of `node_modules`.

@@ -7,8 +7,8 @@
 **چتِ Qoder را فارسی و راست‌به‌چپ بخوانید و بنویسید — بدون دست‌زدن به فایل‌های نصب، بدون شکستنِ آپدیت، با فونتِ وزیرمتنِ آفلاین.**
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/qoder-persian-rtl"><img alt="npm" src="https://img.shields.io/npm/v/qoder-persian-rtl?style=flat-square&label=npm&labelColor=1f2328&color=0d7a5f"></a>
-  <a href="https://www.npmjs.com/package/qoder-persian-rtl"><img alt="downloads" src="https://img.shields.io/npm/dm/qoder-persian-rtl?style=flat-square&label=downloads&labelColor=1f2328&color=2f6feb"></a>
+  <a href="https://www.npmjs.com/package/qoder-rtl"><img alt="npm" src="https://img.shields.io/npm/v/qoder-rtl?style=flat-square&label=npm&labelColor=1f2328&color=0d7a5f"></a>
+  <a href="https://www.npmjs.com/package/qoder-rtl"><img alt="downloads" src="https://img.shields.io/npm/dm/qoder-rtl?style=flat-square&label=downloads&labelColor=1f2328&color=2f6feb"></a>
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A5%2022-339933?style=flat-square&labelColor=1f2328&logo=node.js&logoColor=white">
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-red?style=flat-square&labelColor=1f2328"></a>
   <img alt="install files" src="https://img.shields.io/badge/%D9%81%D8%A7%DB%8C%D9%84_%D9%86%D8%B5%D8%A8-_%D8%AF%D8%B3%D8%AA%20%D9%86%D8%AE%D9%88%D8%B1%D8%AF%D9%87-brightgreen?style=flat-square&labelColor=1f2328">
@@ -66,7 +66,7 @@ Qoder یک قفلِ «تک‌نسخه» دارد: اگر برنامه باز ب�
 ### ۲) یک دستور
 
 ```powershell
-npx qoder-persian-rtl
+npx qoder-rtl
 ```
 
 برنامه بالا می‌آید و پچ به پنجره(ها) تزریق می‌شود. تا این پنجرهٔ ترمینال باز است، پچ زنده می‌ماند و پنجره‌های تازهٔ Qoder هم خودکار پچ می‌شوند. با `Ctrl+C` (یا بستنِ ترمینال) پچ برمی‌گردد به حالتِ اصلیِ Qoder.
@@ -77,13 +77,13 @@ npx qoder-persian-rtl
 
 ```powershell
 node cli.js check        # اگر از ریپو اجرا می‌کنید
-npx qoder-persian-rtl check
+npx qoder-rtl check
 ```
 
 پانزده سطر `PASS/FAIL` می‌گیرید که بیشترشان **اندازهٔ واقعیِ رندر‌شده** است (فونتِ محاسبه‌شدهٔ یک پاراگراف، بلندای سطر، جابه‌جاییِ ستون‌های جدول، فاصلهٔ پنل از لبهٔ پنجره) — نه «فایل هست یا نه». هر سطرِ `UNSURE` یعنی آن ویژگی در این گفت‌وگو قابلِ اندازه‌گیری نبود، نه این‌که سالم است.
 
 <a id="rerun"></a>
-> **هر بار که Qoder را باز می‌کنید، باید دوباره اجرا شود.** این ذاتِ روشِ تزریقِ زنده است: چیزی روی دیسک نوشته نمی‌شود، پس با هر بالا آمدنِ برنامه پچ هم می‌رود. اگر می‌خواهید با دابل‌کلیک باشد: `npx qoder-persian-rtl launcher` یک `Qoder-RTL.cmd` کنارِ ریپو می‌سازد (با `remove-launcher` پاک می‌شود).
+> **هر بار که Qoder را باز می‌کنید، باید دوباره اجرا شود.** این ذاتِ روشِ تزریقِ زنده است: چیزی روی دیسک نوشته نمی‌شود، پس با هر بالا آمدنِ برنامه پچ هم می‌رود. اگر می‌خواهید با دابل‌کلیک باشد: `npx qoder-rtl launcher` یک `Qoder-RTL.cmd` کنارِ ریپو می‌سازد (با `remove-launcher` پاک می‌شود).
 
 ---
 
@@ -151,7 +151,7 @@ npx qoder-persian-rtl check
 <a id="contributing"></a>
 ## مشارکت
 
-مسیرِ تست، قاعدهٔ «اول قرمز، بعد اصلاح»، و قانون‌های دامنه (چه چیزی عمداً پچ نمی‌شود) در [CONTRIBUTING.md](./CONTRIBUTING.md) نوشته شده. برای گزارشِ باگ یک [Issue](https://github.com/Pezhm4n/qoder-persian-rtl/issues) بگذارید؛ اگر می‌نویسید «فلان جا راست‌چین نشد»، یک اسکرین‌شات از همان لحظه خیلی کمک می‌کند.
+مسیرِ تست، قاعدهٔ «اول قرمز، بعد اصلاح»، و قانون‌های دامنه (چه چیزی عمداً پچ نمی‌شود) در [CONTRIBUTING.md](./CONTRIBUTING.md) نوشته شده. برای گزارشِ باگ یک [Issue](https://github.com/Pezhm4n/qoder-rtl/issues) بگذارید؛ اگر می‌نویسید «فلان جا راست‌چین نشد»، یک اسکرین‌شات از همان لحظه خیلی کمک می‌کند.
 
 ## مجوز
 

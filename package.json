@@ -1,5 +1,5 @@
 {
-  "name": "qoder-persian-rtl",
+  "name": "qoder-rtl",
   "version": "1.11.1",
   "description": "Persian/Arabic RTL + Vazirmatn for the Qoder desktop app: CDP live injection by default (no install files touched), archive patch kept behind an explicit command",
   "keywords": [
@@ -18,11 +18,11 @@
   "author": "Pezhman (https://github.com/Pezhm4n)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Pezhm4n/qoder-persian-rtl.git"
+    "url": "git+https://github.com/Pezhm4n/qoder-rtl.git"
   },
-  "homepage": "https://github.com/Pezhm4n/qoder-persian-rtl#readme",
+  "homepage": "https://github.com/Pezhm4n/qoder-rtl#readme",
   "bugs": {
-    "url": "https://github.com/Pezhm4n/qoder-persian-rtl/issues"
+    "url": "https://github.com/Pezhm4n/qoder-rtl/issues"
   },
   "funding": {
     "type": "github",

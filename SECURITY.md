@@ -2,10 +2,10 @@
 
 ## What this tool does to your machine
 
-`qoder-persian-rtl` runs **one** command that changes anything, and by default it changes
+`qoder-rtl` runs **one** command that changes anything, and by default it changes
 nothing on disk:
 
-| Action | Default route (`npx qoder-persian-rtl`) |
+| Action | Default route (`npx qoder-rtl`) |
 |---|---|
 | Write into the Qoder installation | **Never** |
 | Modify a signed binary | **Never** |
@@ -53,9 +53,9 @@ into.
 
 ## Reporting a vulnerability
 
-Open a [GitHub issue](https://github.com/Pezhm4n/qoder-persian-rtl/issues) for anything
+Open a [GitHub issue](https://github.com/Pezhm4n/qoder-rtl/issues) for anything
 non-exploitable (a wrong alignment, a crash, a bad diagnosis). For a security issue you would
-rather disclose privately, use [Report a vulnerability](https://github.com/Pezhm4n/qoder-persian-rtl/security/advisories/new)
+rather disclose privately, use [Report a vulnerability](https://github.com/Pezhm4n/qoder-rtl/security/advisories/new)
 — GitHub's private advisory form — and include the output of `qoder-rtl status`, which prints
 both version numbers.
 

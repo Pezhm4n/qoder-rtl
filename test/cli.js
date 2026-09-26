@@ -1,7 +1,7 @@
 "use strict";
 
 /*
- * Checks for the published command line: what `npx qoder-persian-rtl` actually runs,
+ * Checks for the published command line: what `npx qoder-rtl` actually runs,
  * whether the CDP path really needs no dependencies, and whether the route that writes
  * into the Qoder install stays behind an explicit --yes.
  *
@@ -94,7 +94,7 @@ console.log(JSON.stringify({ bytes: src.length, hasFont: src.includes("Vazirmatn
 
   /* ---------- the bin itself, as a user runs it ---------- */
   const help = runCli(["cli.js", "help"]);
-  check("help exits 0 and lists the safe route first", help.status === 0 && /npx qoder-persian-rtl/.test(help.stdout) && /start/.test(help.stdout) && help.stdout.indexOf("start") < help.stdout.indexOf("patch --yes"), `status=${help.status}`);
+  check("help exits 0 and lists the safe route first", help.status === 0 && /npx qoder-rtl/.test(help.stdout) && /start/.test(help.stdout) && help.stdout.indexOf("start") < help.stdout.indexOf("patch --yes"), `status=${help.status}`);
   check("help names the archive route as the dangerous one", /patch --yes/.test(help.stdout) && /breaks Qoder/.test(help.stdout));
 
   const bogus = runCli(["cli.js", "bogus-command"]);
@@ -111,7 +111,7 @@ process.argv = [process.argv[0], "cli.js", ...process.argv.slice(2)];
 require(root + "/cli.js");
 `, ROOT, "status"]);
   check("status runs with @electron/asar missing", statusRun.status === 0, `status=${statusRun.status} ${(statusRun.stderr || "").slice(0, 200)}`);
-  check("status reports tool, payload and port separately", /tool\s+qoder-persian-rtl/.test(statusRun.stdout) && /payload\s+runtime \d+\.\d+\.\d+/.test(statusRun.stdout) && /debug port/.test(statusRun.stdout), JSON.stringify((statusRun.stdout || "").slice(0, 160)));
+  check("status reports tool, payload and port separately", /tool\s+qoder-rtl/.test(statusRun.stdout) && /payload\s+runtime \d+\.\d+\.\d+/.test(statusRun.stdout) && /debug port/.test(statusRun.stdout), JSON.stringify((statusRun.stdout || "").slice(0, 160)));
   check("status says what it could not find instead of failing", !/undefined|NaN|\[object/.test(statusRun.stdout), JSON.stringify(statusRun.stdout.slice(-200)));
   /* Continuation lines (a value that spans rows, or a hint under a label) must line up with
      the value column — an off-by-one there glued "archive routeavailable" once. */
@@ -137,7 +137,7 @@ require(root + "/cli.js");
   check("no arguments means the CDP route", /if \(!name\) return delegate\(COMMANDS\.start/.test(cli));
   check("only the archive patch is gated", (cli.match(/gated: true/g) || []).length === 1 && /patch: \{ engine: ARCHIVE[^}]*gated: true/.test(cli));
   check("the CLI never kills a running Qoder", !/taskkill|process\.kill|\.kill\(/.test(cli) && /Nothing is killed here on purpose/.test(livejs));
-  check("the archive route is no longer advertised as the npx default", !/npx qoder-persian-rtl\s+patch/.test(read("index.js") + cli));
+  check("the archive route is no longer advertised as the npx default", !/npx qoder-rtl\s+patch/.test(read("index.js") + cli));
 
   /* ---------- the port probe: what a failed `start` now reports ---------- */
   await portProbeChecks();
