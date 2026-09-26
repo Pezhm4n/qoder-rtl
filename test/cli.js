@@ -215,6 +215,31 @@ async function portProbeChecks() {
   const orphan = { port: 9222, state: "occupied", owner: "exited", ownerPid: gone.pid, ownerName: null };
   check("an orphan listener is named as one, and says the port will not free itself", /PID \d+, which has exited/.test(describePort(orphan)) && /orphan/.test(describePort(orphan)), describePort(orphan));
   check("the orphan advice offers a working port instead of a dead end", /--port \d+/.test(adviceFor(orphan)) && /[Qu]uit/.test(adviceFor(orphan)), adviceFor(orphan));
+  /* The free-port advice has two readers with different knowledge: the engine has just
+     launched a Qoder and can name it, while `status` has launched nothing and must not.
+     One sentence cannot be true for both — status used to say "the copy this command
+     started never opened it" about a command that starts no copy. */
+  check("read-only advice does not claim a launch it did not perform",
+    /launched nothing/.test(adviceFor({ port: 9222, state: "free" })) &&
+      !/this command started/.test(adviceFor({ port: 9222, state: "free" })) &&
+      /\bstart\b/.test(adviceFor({ port: 9222, state: "free" })),
+    adviceFor({ port: 9222, state: "free" }));
+  check("the launch-failure advice still names the copy that command started",
+    /this command started/.test(adviceFor({ port: 9222, state: "free" }, true)),
+    adviceFor({ port: 9222, state: "free" }, true));
+  /* Functional, on a port this run controls: if it is not free the check says so rather than
+     passing because the sentence never had a chance to appear. */
+  {
+    const probePort = 9399;
+    const st = runCli(["cli.js", "status", "--port", String(probePort)]);
+    const out = (st.stdout || "") + (st.stderr || "");
+    const flat = out.replace(/\r?\n/g, " | ");
+    check("status prints the read-only advice on a free port",
+      !out ? false : /free to bind/.test(out) ? !/this command started/.test(out) && /launched nothing/.test(out) : false,
+      !out ? `the CLI produced no output (status=${st.status}): ${String(st.error && st.error.message).slice(0, 80)}`
+        : /free to bind/.test(out) ? flat.slice(0, 200)
+        : `port ${probePort} was not free, so the branch never ran: ${flat.slice(0, 160)}`);
+  }
   check("an advice line is produced for every state, none of them blank", ["serving", "free", "blocked", "occupied"].every((st) => {
     const s = { port: 9222, state: st, owner: st === "occupied" ? "unknown" : undefined, reason: "EACCES" };
     return describePort(s).length > 20 && adviceFor(s).length > 20;
@@ -248,7 +273,7 @@ async function portProbeChecks() {
   const sources = ["live.js", "lib/cdp.js", "cli.js", "README.md"].map(read).join("\n");
   check("the disproven \"this build ignores the flag\" verdict is gone", !/[Bb]uild ignores --remote-debugging-port|[Bb]uild ignores the flag/.test(sources));
   const livejs = read("live.js");
-  check("the failure report carries the port observation and the advice", /portObservations\(after/.test(livejs) && /what to do:  \$\{adviceFor\(after\)\}/.test(livejs), "");
+  check("the failure report carries the port observation and the advice", /portObservations\(after/.test(livejs) && /what to do:  \$\{adviceFor\(after, true\)\}/.test(livejs), "");
   /* Red-first guard on ordering: launching must come after both guards, not instead of them. */
   const launchAt = livejs.indexOf("spawn(exe");
   check("start refuses before launching when the process probe failed", /if \(qoder\.error\)/.test(livejs) && livejs.indexOf("if (qoder.error)") < launchAt, `guards=${livejs.indexOf("if (qoder.error)")} launch=${launchAt}`);

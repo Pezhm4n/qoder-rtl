@@ -27,6 +27,10 @@ Payload **1.8.2**.
   closed and no composer is rendered.
 
 ### Fixed
+- `status` no longer prints launch-failure advice for a launch it never performed. The
+  read-only form now says the port is free, that `check` only connects to an already-running
+  Qoder, and points at `start`; the engine's post-launch failure path keeps the old wording,
+  because there the sentence is true.
 - Panel anchoring is measured against `clientWidth/clientHeight` instead of
   `innerWidth/innerHeight`: a `position: fixed` element is laid out against the
   scrollbar-free box, so any scrolling page reported the 52 px inset as 67 px.

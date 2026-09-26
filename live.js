@@ -802,7 +802,7 @@ async function main() {
         `# port ${flags.port} — ${new Date().toISOString()}`,
         `FAIL  nothing served DevTools on 127.0.0.1:${flags.port} for ${waited}s after launching Qoder.`,
         ...portObservations(after, qoderProcesses(), devtoolsRecords(), startedAt),
-        `      what to do:  ${adviceFor(after)}`
+        `      what to do:  ${adviceFor(after, true)}`
       ].join("\n");
       console.log(text);
       console.log("Verdict appended to " + writeVerdict(text));
