@@ -213,7 +213,10 @@ function main() {
      shape would report the dead slider as working again. */
   const controls = controlsProbeSource();
   check("the controls probe measures the code box on its own drive",
-    controls.includes('querySelector("[data-chat-message-text] :not(pre) > code")') && /api\.apply\(\{ codeSize: 6 \}\)/.test(controls) && controls.includes("codeBefore") && controls.includes("codeAfter"),
+    controls.includes('querySelector("[data-chat-message-text] :not(pre) > code")') &&
+      /api\.apply\(\{ codeSize: probeCode \}\)/.test(controls) &&
+      /api\.apply\(restore\);\s*var codeBefore = nums\(\);/.test(controls) &&
+      controls.includes("codeAfter"),
     (controls.match(/var code = [^\n]*/) || [""])[0]);
   check("the read-only probe reports the code island and the code size setting", probe.includes("codeIsland") && /settings: rtl[\s\S]{0,160}codeSize: rtl\.config\.codeSize/.test(probe));
   /* A panel the user hid with «پنهان کردن پنل» is a supported state, not a failure. */
@@ -320,6 +323,17 @@ function main() {
     fixture.includes("data-task-monitor-fixed-panel") && /id="t-mon-fa"/.test(fixture) && /id="t-mon-en"/.test(fixture) &&
       /data-chat-composer-placeholder[^>]*>[\s\S]{0,80}Continue this task/.test(fixture),
     JSON.stringify({ panel: fixture.includes("data-task-monitor-fixed-panel"), ghost: /Continue this task/.test(fixture) }));
+
+  /* A slider probe that drives a control to the value it already holds moves nothing, and the
+     audit line then blames the patch. Seen live on 0.4.2: the user's own leading was exactly
+     the probe's constant, so the line failed while the feature worked. */
+  check("the slider probe picks targets away from the user's own values",
+    /var apart = function \(current, preferred, step, lo, hi\)/.test(controls) &&
+      /var probeLead = apart\(api\.config\.lineHeight, 2\.15, 0\.4, 1\.2, 2\.4\)/.test(controls) &&
+      /api\.apply\(\{ lineHeight: probeLead, chatSize: probeChat \}\)/.test(controls) &&
+      /api\.apply\(\{ codeSize: probeCode \}\)/.test(controls) &&
+      !/api\.apply\(\{ lineHeight: 2\.15/.test(controls) && !/codeSize: 6 \}\)/.test(controls),
+    (controls.match(/var probe\w+ = apart\([^\n]*/) || ["no computed probe targets"]).join(" ; "));
 
   check("dispose removes every inline leading stamp", /function clearLeading\([\s\S]*?\}\s*function applyConfig/.test(rtljs) && /function dispose\([\s\S]*clearLeading\(\)/.test(rtljs));
 

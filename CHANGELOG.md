@@ -14,6 +14,23 @@ Two version numbers exist and they are **not** the same thing:
 Package 1.4.0 – 1.7.0 were never released: payloads 1.4.0–1.8.0 all shipped together in
 package 1.8.0.
 
+## [1.11.2] - 2026-09-26
+
+Payload unchanged (1.8.3). This is a fix to the audit itself.
+
+### Fixed
+- `check` no longer reports a false FAIL on **panel sliders change the prose when applied**.
+  The controls probe drove `lineHeight` to a hard-coded 2.15, so a user whose own leading
+  already *is* 2.15 got a zero-delta measurement — seen live on Qoder 0.4.2, where the line
+  failed while the slider worked. The probe now picks a target at least 0.25 away from the
+  user's value, inside the panel's real bounds, and reports the values it used.
+
+### Verified
+- First live run against **Qoder 0.4.2** (the app auto-updated from 0.3.3): **15/15 PASS**,
+  with the DOM anchors intact (`turn`, `messageText`, `userBubble`, `composer`,
+  `data-task-monitor-fixed-panel` all reachable), the human bubble at `qrt-fa rtl/right`,
+  the placeholder at `qrt-en ltr/left`, and the composer box reading `editor=rtl/per-line`.
+
 ## [1.11.1] - 2026-09-26
 
 Payload **1.8.3**.
