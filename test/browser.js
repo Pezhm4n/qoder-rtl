@@ -169,7 +169,13 @@ async function settingsTest() {
     var byId = function (id) { return document.getElementById(id); };
     var codeHeavy = byId("t-code-heavy"), codeOnly = byId("t-code-only"), bomLine = byId("t-bom");
     var userFa = byId("t-user-fa"), userEn = byId("t-user-en");
-    if (!p || !li || !liEn || !bq || !enOl || !mixedUl || !codeHeavy || !codeOnly || !bomLine || !userFa || !userEn) {
+    /* The two surfaces the owner's report turned out to be: the composer's editor and its
+       ghost placeholder (RTL-pinned by the stylesheet, never classified), and the agent's
+       task-monitor panel (not anchored anywhere, so untouched). */
+    var monFa = byId("t-mon-fa"), monEn = byId("t-mon-en");
+    var editor = document.querySelector("[data-chat-composer] [contenteditable]");
+    var ghost = document.querySelector("[data-chat-composer] [data-chat-composer-placeholder]");
+    if (!p || !li || !liEn || !bq || !enOl || !mixedUl || !codeHeavy || !codeOnly || !bomLine || !userFa || !userEn || !monFa || !monEn || !editor || !ghost) {
       return JSON.stringify({ error: "fixture prose is missing" });
     }
     var restore = { rtl: api.config.rtl, mode: api.config.mode, lineHeight: api.config.lineHeight, codeSize: api.config.codeSize };
@@ -211,6 +217,13 @@ async function settingsTest() {
       userEn: ratio(userEn),
       userStamp: { fa: userFa.hasAttribute("data-qrt-lead"), en: userEn.hasAttribute("data-qrt-lead") },
       userMarkdown: !!(userFa.querySelector("p") || userEn.querySelector("p")),
+      /* The composer is where you type Persian *and* English, so a fixed RTL pin is wrong
+         half the time: both its surfaces need their own verdict like any other block. */
+      editor: ratio(editor),
+      ghost: ratio(ghost),
+      monFa: ratio(monFa),
+      monEn: ratio(monEn),
+      monStamp: { fa: monFa.hasAttribute("data-qrt-lead"), en: monEn.hasAttribute("data-qrt-lead") },
       mixedUl: getComputedStyle(mixedUl).direction,
       enOl: getComputedStyle(enOl).direction
     };
@@ -220,6 +233,8 @@ async function settingsTest() {
       li: ratio(li),
       bq: ratio(bq),
       userFa: ratio(userFa),
+      monFa: ratio(monFa),
+      ghost: ratio(ghost),
       marks: document.querySelectorAll(".qrt-fa,.qrt-en").length,
       root: document.documentElement.getAttribute("data-qrt-mode")
     };
@@ -263,9 +278,10 @@ async function settingsTest() {
            the failure mode here: the fixture's figcaption pair, its <summary> and the
            paragraph inside <details> raised these from 4/5 to 6/7 (the caption and the
            table cells are deliberately not classified — the tables switch owns those),
-           and Qoder's own human turn — two bubbles, one per language — raised them to 7/8. */
-        val.smart.fa === 7 &&
-        val.smart.en === 8,
+           and Qoder's own human turn — two bubbles, one per language — raised them to 7/8,
+           and the composer's two surfaces plus the task-monitor panel to 9/10. */
+        val.smart.fa === 9 &&
+        val.smart.en === 10,
       JSON.stringify(val.smart)
     );
     /* The defect the owner reported: «چرا دیگه روی پیام‌های ورودی کاربر اعمال نمیشه؟».
@@ -290,6 +306,38 @@ async function settingsTest() {
       JSON.stringify({ stamp: val.smart.userStamp, fa: val.smart.userFa, en: val.smart.userEn })
     );
     check("turning direction off returns your own message to LTR", val.off.userFa.dir === "ltr" && val.off.userFa.align === "left", JSON.stringify(val.off.userFa));
+    /* Batch 9, from the owner's «حین صحبت بهم ریخته»: the composer's editor and its ghost
+       placeholder are RTL-pinned by the stylesheet but were never classified, so an English
+       placeholder sat right-aligned with its ellipsis on the wrong side — and that placeholder
+       only appears while a run is going on, which is what made it look streaming-specific. */
+    check(
+      "the composer gets its own direction verdict",
+      val.smart.editor.dir === "rtl" && val.smart.editor.align === "right" && /qrt-fa/.test(val.smart.editor.cls),
+      JSON.stringify(val.smart.editor)
+    );
+    check(
+      "an all-Latin placeholder is not right-aligned",
+      val.smart.ghost.dir === "ltr" && val.smart.ghost.align === "left" && /qrt-en/.test(val.smart.ghost.cls),
+      JSON.stringify(val.smart.ghost)
+    );
+    /* The task-monitor panel: measured on the live window as Persian prose at direction:ltr
+       inside [data-task-monitor-fixed-panel], filled during a run and collapsed after it. */
+    check(
+      "the agent's task-monitor panel follows the patch, both ways",
+      val.smart.monFa.dir === "rtl" && val.smart.monFa.align === "right" && /qrt-fa/.test(val.smart.monFa.cls) &&
+        val.smart.monEn.dir === "ltr" && val.smart.monEn.align === "left" && /qrt-en/.test(val.smart.monEn.cls),
+      JSON.stringify({ fa: val.smart.monFa, en: val.smart.monEn })
+    );
+    check(
+      "the leading stamp reaches the task-monitor panel too",
+      val.smart.monStamp.fa === true && val.smart.monStamp.en === true && holds(val.smart.monFa, 2.3) && holds(val.smart.monEn, 2.3),
+      JSON.stringify({ stamp: val.smart.monStamp, fa: val.smart.monFa })
+    );
+    check(
+      "turning direction off returns the panel and the placeholder to LTR",
+      val.off.monFa.dir === "ltr" && val.off.monFa.align === "left" && val.off.ghost.dir === "ltr" && val.off.ghost.align === "left",
+      JSON.stringify({ mon: val.off.monFa, ghost: val.off.ghost })
+    );
     /* Not a behaviour check but the fixture's premise: Qoder puts the human turn's text on
        the container instead of rendering markdown for it. If that ever stops being true,
        the bubble rows above would be proving nothing and this is what says so. */
@@ -541,13 +589,21 @@ async function geometryTest() {
       val.reversed.cell.dir === "rtl" && val.reversed.cell.align === "right" && val.plain.cell.dir === val.reversed.cell.dir,
       JSON.stringify({ plain: val.plain.cell, reversed: val.reversed.cell })
     );
+    /* What has to agree between the ghost text and the editor under it is the *type*, not the
+       direction. The placeholder is its own string — measured on the live window as the Latin
+       «Continue this task…» over a Persian editor — so in smart mode each surface now carries
+       its own verdict, and the batch-9 defect was precisely that both were RTL-pinned with
+       nothing to classify either. A regression back to the app's font or its own leading still
+       fails this check, which is what it was written for. */
     check(
-      "the composer placeholder matches the editor it stands over",
+      "the composer placeholder shares the editor's type and gets its own direction",
       /Vazirmatn/.test(val.plain.ghost.face) &&
-        val.plain.ghost.dir === "rtl" &&
         Math.abs(ratio(val.plain.ghost) - 2.1) <= 0.06 &&
-        val.plain.ghost.dir === val.plain.editor.dir &&
-        Math.abs(ratio(val.plain.ghost) - ratio(val.plain.editor)) <= 0.06,
+        Math.abs(ratio(val.plain.ghost) - ratio(val.plain.editor)) <= 0.06 &&
+        val.plain.ghost.dir === "ltr" &&
+        /qrt-en/.test(val.plain.ghost.cls) &&
+        val.plain.editor.dir === "rtl" &&
+        /qrt-fa/.test(val.plain.editor.cls),
       JSON.stringify({ ghost: val.plain.ghost, editor: val.plain.editor })
     );
 

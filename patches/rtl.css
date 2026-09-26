@@ -33,7 +33,8 @@
    .markdown-body's own family instead of ours. */
 
 [data-chat-message-text],
-[data-chat-composer] {
+[data-chat-composer],
+[data-task-monitor-fixed-panel] {
   font-family: var(--qrt-stack) !important;
   line-height: var(--qrt-leading);
   /* The text-size control scales the subtree instead of overriding each
@@ -42,11 +43,13 @@
 }
 
 [data-chat-message-text] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, td, th, a, span, strong, em, b, i, label, figcaption, caption, summary),
+[data-task-monitor-fixed-panel] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, a, span, strong, em, b, i, label, figcaption, summary),
 [data-chat-composer] :is([contenteditable="true"], textarea, [data-chat-composer-placeholder], [data-chat-composer-placeholder] *) {
   font-family: var(--qrt-stack) !important;
 }
 
 [data-chat-message-text] :is(p, li, dd, dt, blockquote, td, th, figcaption, caption, summary),
+[data-task-monitor-fixed-panel] :is(p, li, dd, dt, blockquote, figcaption, summary),
 [data-user-bubble] [data-chat-message-text],
 [data-chat-composer] :is([contenteditable="true"], textarea, [data-chat-composer-placeholder]) {
   line-height: var(--qrt-leading) !important;
@@ -75,6 +78,7 @@
    assistant's markdown got `direction: rtl` through its `<p>`s and your message stayed
    left-aligned in the app's own font metrics. */
 [data-chat-message-text] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, figcaption, summary),
+[data-task-monitor-fixed-panel] :is(p, li, dd, dt, blockquote, h1, h2, h3, h4, h5, h6, figcaption, summary),
 [data-user-bubble] [data-chat-message-text],
 [data-chat-composer] :is(textarea, [contenteditable="true"], [data-chat-composer-placeholder]) {
   unicode-bidi: plaintext;
@@ -97,12 +101,19 @@
    but never classified is precisely the 1.4.0 bug (an English figure caption sitting
    right-aligned with no class to argue with), and test/live.js checks that invariant. */
 html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-en,
+html[data-qrt-mode="smart"] [data-task-monitor-fixed-panel] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-en,
+/* The composer is typed into in both languages, so a fixed RTL pin was wrong half the time:
+   measured on the live window, the run-time placeholder «Continue this task…» is Latin and sat
+   right-aligned with its ellipsis on the wrong side, while the editor holds your Persian. */
+html[data-qrt-mode="smart"] [data-chat-composer] :is([contenteditable="true"], [data-chat-composer-placeholder]).qrt-en,
 html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-en {
   direction: ltr;
   text-align: left;
 }
 
 html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-fa,
+html[data-qrt-mode="smart"] [data-task-monitor-fixed-panel] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-fa,
+html[data-qrt-mode="smart"] [data-chat-composer] :is([contenteditable="true"], [data-chat-composer-placeholder]).qrt-fa,
 html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-fa {
   direction: rtl;
   text-align: right;
@@ -112,12 +123,14 @@ html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-fa {
    stay on the reading-start side of the RTL page and each item carries its own
    direction. Every Latin item now carries .qrt-en, so the older :has(> .qrt-en) alone
    would have flipped a list that only has one English line in it. */
-html[data-qrt-mode="smart"] [data-chat-message-text] :is(ul, ol):has(> .qrt-en):not(:has(> .qrt-fa)) {
+html[data-qrt-mode="smart"] [data-chat-message-text] :is(ul, ol):has(> .qrt-en):not(:has(> .qrt-fa)),
+html[data-qrt-mode="smart"] [data-task-monitor-fixed-panel] :is(ul, ol):has(> .qrt-en):not(:has(> .qrt-fa)) {
   direction: ltr;
 }
 
 /* force mode pins every prose block to RTL */
 html[data-qrt-mode="force"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
+html[data-qrt-mode="force"] [data-task-monitor-fixed-panel] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
 html[data-qrt-mode="force"] [data-user-bubble] [data-chat-message-text],
 html[data-qrt-mode="force"] [data-chat-composer] :is(textarea, [contenteditable="true"], [data-chat-composer-placeholder]) {
   direction: rtl !important;
@@ -125,6 +138,7 @@ html[data-qrt-mode="force"] [data-chat-composer] :is(textarea, [contenteditable=
 }
 
 html[data-qrt-mode="off"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, td, th, figcaption, caption, summary),
+html[data-qrt-mode="off"] [data-task-monitor-fixed-panel] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary),
 html[data-qrt-mode="off"] [data-user-bubble] [data-chat-message-text],
 html[data-qrt-mode="off"] [data-chat-composer] :is(textarea, [contenteditable="true"], [data-chat-composer-placeholder]) {
   direction: ltr !important;
@@ -136,14 +150,18 @@ html[data-qrt-mode="off"] [data-chat-composer] :is(textarea, [contenteditable="t
    text in RTL: unscoped, "خاموش" left the bullets on the right of left-aligned Latin
    items, because the list element itself is not in the override list above. */
 html[data-qrt-mode="smart"] [data-chat-message-text] :is(ul, ol),
-html[data-qrt-mode="force"] [data-chat-message-text] :is(ul, ol) {
+html[data-qrt-mode="smart"] [data-task-monitor-fixed-panel] :is(ul, ol),
+html[data-qrt-mode="force"] [data-chat-message-text] :is(ul, ol),
+html[data-qrt-mode="force"] [data-task-monitor-fixed-panel] :is(ul, ol) {
   direction: rtl;
   padding-inline-start: 1.5em;
   list-style-position: inside;
 }
 
 html[data-qrt-mode="smart"] [data-chat-message-text] blockquote,
-html[data-qrt-mode="force"] [data-chat-message-text] blockquote {
+html[data-qrt-mode="smart"] [data-task-monitor-fixed-panel] blockquote,
+html[data-qrt-mode="force"] [data-chat-message-text] blockquote,
+html[data-qrt-mode="force"] [data-task-monitor-fixed-panel] blockquote {
   border-inline-start-width: 2px;
   border-inline-end-width: 0;
   border-left-width: 0;

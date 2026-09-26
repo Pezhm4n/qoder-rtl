@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.8.1";
+  var VERSION = "1.8.2";
   var STORE_KEY = "qoder_persian_rtl_config_v1";
   if (typeof window === "undefined" || typeof document === "undefined") return;
   var previous = window.__QODER_RTL__;
@@ -53,7 +53,29 @@
        message never got a verdict and sat under the app's LTR defaults while every reply
        was RTL. The base CSS rule pins that container too, and an RTL-pinned block that
        cannot be classified is exactly the 1.4.0 bug. */
-    "[data-user-bubble] [data-chat-message-text]"
+    "[data-user-bubble] [data-chat-message-text]" /* the human turn: text on the container */,
+    /* The composer's two text surfaces are direction-pinned by the stylesheet, so they need
+       a verdict like any other block: measured on the live window, the run-time placeholder
+       «Continue this task…» is Latin and had no class to hand it back to LTR. `textarea` is
+       deliberately absent — it is in CODE_ANCHOR, so markBlocks() skips it, and its text is
+       in `.value`, which the classifier does not read. Qoder's editor is contenteditable. */
+    "[data-chat-composer] [contenteditable]",
+    "[data-chat-composer] [data-chat-composer-placeholder]",
+    /* The agent's task-monitor / recap panel: Persian prose that lives outside every chat
+       hook, is filled while a run is going on and collapses when it ends. */
+    "[data-task-monitor-fixed-panel] p",
+    "[data-task-monitor-fixed-panel] li",
+    "[data-task-monitor-fixed-panel] blockquote",
+    "[data-task-monitor-fixed-panel] h1",
+    "[data-task-monitor-fixed-panel] h2",
+    "[data-task-monitor-fixed-panel] h3",
+    "[data-task-monitor-fixed-panel] h4",
+    "[data-task-monitor-fixed-panel] h5",
+    "[data-task-monitor-fixed-panel] h6",
+    "[data-task-monitor-fixed-panel] dd",
+    "[data-task-monitor-fixed-panel] dt",
+    "[data-task-monitor-fixed-panel] figcaption",
+    "[data-task-monitor-fixed-panel] summary"
   ].join(",");
 
   /* Body prose whose leading the panel controls. This list is the inline-stamping half of
@@ -73,6 +95,13 @@
     "[data-chat-message-text] figcaption",
     "[data-chat-message-text] summary",
     "[data-user-bubble] [data-chat-message-text]",
+    "[data-task-monitor-fixed-panel] p",
+    "[data-task-monitor-fixed-panel] li",
+    "[data-task-monitor-fixed-panel] dd",
+    "[data-task-monitor-fixed-panel] dt",
+    "[data-task-monitor-fixed-panel] blockquote",
+    "[data-task-monitor-fixed-panel] figcaption",
+    "[data-task-monitor-fixed-panel] summary",
     "[data-chat-composer] [contenteditable]",
     "[data-chat-composer] textarea",
     "[data-chat-composer] [data-chat-composer-placeholder]"

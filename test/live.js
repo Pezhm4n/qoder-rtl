@@ -256,6 +256,60 @@ function main() {
     /bubbleShots\.length\s*\?[\s\S]{0,1200}:\s*null/.test(livejs) && livejs.includes("no user message rendered to measure"),
     (/const bubbleShots = [^\n]*/.exec(livejs) || [""])[0]);
 
+  /* ---- batch 9: two surfaces outside the message list. The agent's task-monitor panel
+       ([data-task-monitor-fixed-panel]) renders Persian prose with no chat hook above it, and
+       the composer's ghost placeholder was RTL-pinned by the stylesheet with nothing to
+       classify it. Both only appear while a run is going on, which is why the owner read it
+       as "RTL breaks while streaming". Same six-group + both-lists invariant as batch 8. ---- */
+  const MON = "[data-task-monitor-fixed-panel]";
+  /* Escaped for the regexes: interpolating the raw selector would turn its brackets into a
+     character class and the hyphens into ranges. */
+  const MON_RE = "\\[data-task-monitor-fixed-panel\\]";
+  const monGroups = {
+    leading: new RegExp(`${MON_RE} :is\\([^)]*\\),[^{]*\\{\\s*line-height: var\\(--qrt-leading\\) !important;`),
+    direction: new RegExp(`${MON_RE} :is\\([^)]*\\),[^{]*\\{\\s*unicode-bidi: plaintext;`),
+    smartEn: new RegExp(`${MON_RE} :is\\([^)]*\\)\\.qrt-en,[^{]*\\{\\s*direction: ltr;`),
+    smartFa: new RegExp(`${MON_RE} :is\\([^)]*\\)\\.qrt-fa,[^{]*\\{\\s*direction: rtl;`),
+    force: new RegExp(`${MON_RE} :is\\([^)]*\\),[^{]*\\{\\s*direction: rtl !important;`),
+    off: new RegExp(`${MON_RE} :is\\([^)]*\\),[^{]*\\{\\s*direction: ltr !important;`)
+  };
+  const monMissing = Object.keys(monGroups).filter((k) => !monGroups[k].test(css));
+  check("the task-monitor panel is carried by all six prose rule groups",
+    monMissing.length === 0, JSON.stringify({ missing: monMissing, mentions: (css.match(/data-task-monitor-fixed-panel/g) || []).length }));
+  /* Derive the tag list from the rule that actually pins direction, so this check cannot
+     drift into agreeing with itself, and refuse to pass on an empty match. */
+  const basePinned = new RegExp(`${MON_RE} :is\\(([^)]*)\\),[^{]*\\{\\s*unicode-bidi: plaintext;`).exec(css);
+  const baseTags = basePinned ? basePinned[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
+  const monUnclassified = baseTags.filter((t) => !blockList.includes(`"${MON} ${t}"`));
+  check("every panel tag the base RTL rule pins can also be classified",
+    baseTags.length >= 10 && monUnclassified.length === 0,
+    JSON.stringify({ pinned: baseTags.length, missing: monUnclassified }));
+  check("the panel's prose is stamped for leading, not only given a direction",
+    baseTags.filter((t) => /p|li|dd|dt|blockquote|figcaption|summary/.test(t)).every((t) => leadList.includes(`"${MON} ${t}"`)),
+    leadList.includes(`"${MON} p"`) ? "panel p in LEAD_SELECTOR" : "panel p missing from LEAD_SELECTOR");
+  /* The composer half: pinned by the base rule since 1.6.0, classified only now — an English
+     placeholder had no .qrt-en to hand it back to LTR. */
+  check("the composer's editor and placeholder get a verdict, both ways",
+    blockList.includes('"[data-chat-composer] [contenteditable]"') &&
+      blockList.includes('"[data-chat-composer] [data-chat-composer-placeholder]"') &&
+      /html\[data-qrt-mode="smart"\] \[data-chat-composer\] :is\(\[contenteditable="true"\], \[data-chat-composer-placeholder\]\)\.qrt-en/.test(css) &&
+      /html\[data-qrt-mode="smart"\] \[data-chat-composer\] :is\(\[contenteditable="true"\], \[data-chat-composer-placeholder\]\)\.qrt-fa/.test(css),
+    JSON.stringify({ blockEditor: blockList.includes('"[data-chat-composer] [contenteditable]"'), smartEn: /placeholder\]\)\.qrt-en/.test(css) }));
+  check("the verdict measures the panel and the placeholder instead of assuming them",
+    probe.includes("monitorText: monitor") && /var monitor = readSurface\(/.test(probe) &&
+      probe.includes('taskMonitor: count("[data-task-monitor-fixed-panel]")') && /var ghost = readSurface\(/.test(probe),
+    (probe.match(/var monitor = readSurface\([^\n]*/) || [""])[0]);
+  check("the new row refuses to pass on a window that rendered neither surface",
+    /surfaceShots\.length\s*\?[\s\S]{0,1800}:\s*null/.test(livejs) && livejs.includes("not rendered to measure"),
+    (/const surfaceShots = [^\n]*/.exec(livejs) || [""])[0]);
+  /* And the fixture has to keep containing the surfaces, or these rows quietly degrade to
+     "never measured" forever — the exact blind spot that hid the batch-8 defect. */
+  const fixture = fs.readFileSync(path.join(__dirname, "fixtures", "chat.html"), "utf8");
+  check("the fixture carries the panel and a Latin placeholder",
+    fixture.includes("data-task-monitor-fixed-panel") && /id="t-mon-fa"/.test(fixture) && /id="t-mon-en"/.test(fixture) &&
+      /data-chat-composer-placeholder[^>]*>[\s\S]{0,80}PLACEHOLDER FIXTURE ROW/.test(fixture),
+    JSON.stringify({ panel: fixture.includes("data-task-monitor-fixed-panel"), ghost: /PLACEHOLDER FIXTURE ROW/.test(fixture) }));
+
   check("dispose removes every inline leading stamp", /function clearLeading\([\s\S]*?\}\s*function applyConfig/.test(rtljs) && /function dispose\([\s\S]*clearLeading\(\)/.test(rtljs));
 
   check("font is registered through the FontFace API", src.includes("new FontFace(") && src.includes("document.fonts.add("));

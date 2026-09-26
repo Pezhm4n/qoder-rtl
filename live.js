@@ -425,6 +425,9 @@ function verdictRows(reports) {
      whether the bubble is patched, so that row reads UNSURE rather than passing on the
      strength of a measurement that never happened. */
   const bubbleShots = answered.filter((r) => r.applied && r.applied.userText);
+  /* Windows where the batch-9 surfaces actually exist to measure: the task-monitor panel is
+     closed most of the time, and a window with no composer renders no placeholder. */
+  const surfaceShots = answered.filter((r) => r.applied && (r.applied.monitorText || r.applied.composerGhost || r.applied.composerEditor));
   return [
     { name: "page targets visible over CDP", pass: reports.length > 0, detail: `${reports.length} target(s)` },
     { name: "probes answered", pass: !unknown && reports.length > 0, detail: unknown ? reports.map((r) => r.error).filter(Boolean).join(" / ") || "—" : `${answered.length}/${reports.length}` },
@@ -539,6 +542,36 @@ function verdictRows(reports) {
             })
             .join(" | ")
         : answered.map((r) => (r.hooks && r.hooks.messageText > 0 ? `${r.hooks.userBubble} bubble node(s) with ${r.hooks.turn} turn(s)` : "no chat rendered here")).join(" | ") || "—"
+    },
+    {
+      /* Batch 9, from «RTL حین صحبت بهم ریخته است»: the agent's task-monitor panel holds
+         Persian prose and sits outside every chat hook, and the composer's ghost placeholder
+         was RTL-pinned with nothing to classify it, so an English «Continue this task…» read
+         right-aligned with its ellipsis on the wrong side. Both surfaces appear during a run
+         and disappear after it, which is what made the defect look streaming-specific. */
+      name: surfaceShots.length ? "surfaces outside the message list follow the patch" : "task-monitor panel / placeholder (not rendered to measure)",
+      pass: surfaceShots.length
+        ? surfaceShots.some((r) => {
+            const a = r.applied;
+            const one = (u) => {
+              if (!u) return true; /* that surface is absent in this window: nothing to fail */
+              if (a.mode === "off") return u.direction === "ltr";
+              if (u.cls === "qrt-fa") return u.direction === "rtl" && u.textAlign === "right";
+              if (u.cls === "qrt-en") return u.direction === "ltr" && u.textAlign === "left";
+              return false; /* an unmarked, RTL-pinned block is the defect itself */
+            };
+            return one(a.monitorText) && one(a.composerGhost) && one(a.composerEditor);
+          })
+        : null,
+      detail: surfaceShots.length
+        ? surfaceShots
+            .map((r) => {
+              const a = r.applied;
+              const fmt = (label, u) => (u ? `${label}=${u.cls || "UNMARKED"} ${u.direction}/${u.textAlign} stamp=${u.stamp || "none"}` : `${label}=absent`);
+              return [fmt("monitor", a.monitorText), fmt("ghost", a.composerGhost), fmt("editor", a.composerEditor)].join(" ");
+            })
+            .join(" | ")
+        : answered.map((r) => `panel nodes=${r.hooks ? r.hooks.taskMonitor : "?"}, composer nodes=${r.hooks ? r.hooks.composer : "?"}`).join(" | ") || "—"
     },
     row(
       "chat DOM hooks reachable",

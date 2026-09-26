@@ -247,6 +247,21 @@
           </div>
         </div>
       </div>
+      <!-- Measured on the live window 2026-09-24: the agent's task-monitor / recap panel
+           ([data-task-monitor-fixed-panel] > div.group/recap > section > p.relative) renders
+           Persian prose and is filled *while the agent runs*, which is why the defect read as
+           "RTL breaks during streaming" — it was never patched at all, and it collapses when
+           the run ends. Two paragraphs so the verdict is tested both ways. -->
+      <div data-task-monitor-fixed-panel class="flex h-full min-h-0 flex-col">
+        <div class="shrink-0 px-3">
+          <div class="group/recap relative max-h-64">
+            <section class="relative flex flex-col gap-2">
+              <p id="t-mon-fa" class="relative z-0 w-full break-words">آمار رسمیِ تست شرطِ ما را غلط کرد و باید دوباره محاسبه شود.</p>
+              <p id="t-mon-en" class="relative z-0 w-full break-words">Published zeros ratio moved by 0.7% on the held-out split.</p>
+            </section>
+          </div>
+        </div>
+      </div>
     </div>
     <script>
       /* Imitates Qoder's renderer, which owns <html class="…"> and rewrites it
