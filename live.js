@@ -560,7 +560,11 @@ function verdictRows(reports) {
               if (u.cls === "qrt-en") return u.direction === "ltr" && u.textAlign === "left";
               return false; /* an unmarked, RTL-pinned block is the defect itself */
             };
-            return one(a.monitorText) && one(a.composerGhost) && one(a.composerEditor);
+            /* The editor is the one block that must NOT carry a verdict: it holds several hard
+               lines, and `unicode-bidi: plaintext` gives each of them its own direction. So it
+               is scored on the box staying RTL and isolated per line, not on a class. */
+            const editorOk = (u) => !u || (a.mode === "off" ? u.direction === "ltr" : u.direction === "rtl" && u.bidi === "plaintext" && !/qrt-(fa|en)/.test(u.cls || ""));
+            return one(a.monitorText) && one(a.composerGhost) && editorOk(a.composerEditor);
           })
         : null,
       detail: surfaceShots.length
@@ -568,7 +572,8 @@ function verdictRows(reports) {
             .map((r) => {
               const a = r.applied;
               const fmt = (label, u) => (u ? `${label}=${u.cls || "UNMARKED"} ${u.direction}/${u.textAlign} stamp=${u.stamp || "none"}` : `${label}=absent`);
-              return [fmt("monitor", a.monitorText), fmt("ghost", a.composerGhost), fmt("editor", a.composerEditor)].join(" ");
+              const e = a.composerEditor;
+              return [fmt("monitor", a.monitorText), fmt("ghost", a.composerGhost), e ? `editor=${e.direction}/${e.bidi === "plaintext" ? "per-line" : e.bidi}` : "editor=absent"].join(" ");
             })
             .join(" | ")
         : answered.map((r) => `panel nodes=${r.hooks ? r.hooks.taskMonitor : "?"}, composer nodes=${r.hooks ? r.hooks.composer : "?"}`).join(" | ") || "—"

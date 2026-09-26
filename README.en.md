@@ -34,6 +34,7 @@ Qoder — like most Electron apps — takes text direction from the **interface 
 ## Features
 
 - **Per-block direction, decided by the text itself.** A Persian sentence that happens to start with a Latin identifier stays right-aligned. Force-RTL and off modes are both available.
+- **Inside the composer, every line keeps its own direction.** One English word in a Persian message does not left-align the whole input — that line goes left, the rest stays right. Measured from per-line geometry, not from a computed style.
 - **Code, terminals and file paths stay left-to-right** — even inside a fully Persian message, in the app's own monospace font.
 - **Vazirmatn ships inside the tool** and is registered from inlined bytes: no download, no font installed on your system, works offline. The font is registered through the `FontFace` API, so a strict `font-src` policy cannot block it.
 - **Your own messages follow the patch too**, not only the assistant's replies — the human turn is rendered differently by Qoder and needed its own rules.
@@ -136,8 +137,8 @@ Because on Qoder 0.3.3 it bricked the app: `EnableEmbeddedAsarIntegrityValidatio
 <a id="verification"></a>
 ## Verification
 
-- `npm test` → **176** offline checks (payload shape, CLI behaviour and gates, staged-archive audit)
-- `npm run test:browser` → **63** end-to-end checks against headless Chromium, including real mouse and keyboard events and rendered-geometry measurements
+- `npm test` → **180** offline checks (payload shape, CLI behaviour and gates, staged-archive audit)
+- `npm run test:browser` → **64** end-to-end checks against headless Chromium, including real mouse and keyboard events and rendered-geometry measurements
 - `node cli.js check` → **15** lines on a real Qoder window
 
 Every new assertion is proven **red against the previous version** before it is trusted: a check that passes on broken code is not a check.

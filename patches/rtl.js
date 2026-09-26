@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.8.2";
+  var VERSION = "1.8.3";
   var STORE_KEY = "qoder_persian_rtl_config_v1";
   if (typeof window === "undefined" || typeof document === "undefined") return;
   var previous = window.__QODER_RTL__;
@@ -54,12 +54,13 @@
        was RTL. The base CSS rule pins that container too, and an RTL-pinned block that
        cannot be classified is exactly the 1.4.0 bug. */
     "[data-user-bubble] [data-chat-message-text]" /* the human turn: text on the container */,
-    /* The composer's two text surfaces are direction-pinned by the stylesheet, so they need
-       a verdict like any other block: measured on the live window, the run-time placeholder
-       «Continue this task…» is Latin and had no class to hand it back to LTR. `textarea` is
-       deliberately absent — it is in CODE_ANCHOR, so markBlocks() skips it, and its text is
-       in `.value`, which the classifier does not read. Qoder's editor is contenteditable. */
-    "[data-chat-composer] [contenteditable]",
+    /* The composer's ghost placeholder is one string, so it gets one verdict like any other
+       block: measured on the live window, the Latin «Continue this task…» sat right-aligned
+       with its ellipsis on the wrong side. The *editor* is deliberately NOT here — it holds
+       several hard lines, and a block-level verdict on it flipped the whole input to LTR over
+       a single Latin letter. The base rule leaves it `rtl` + `unicode-bidi: plaintext`, which
+       decides each line from that line's own text. `textarea` is absent for a different
+       reason: it is in CODE_ANCHOR, so markBlocks() skips it, and its text is `.value`. */
     "[data-chat-composer] [data-chat-composer-placeholder]",
     /* The agent's task-monitor / recap panel: Persian prose that lives outside every chat
        hook, is filled while a run is going on and collapses when it ends. */

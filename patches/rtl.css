@@ -102,10 +102,11 @@
    right-aligned with no class to argue with), and test/live.js checks that invariant. */
 html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-en,
 html[data-qrt-mode="smart"] [data-task-monitor-fixed-panel] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-en,
-/* The composer is typed into in both languages, so a fixed RTL pin was wrong half the time:
-   measured on the live window, the run-time placeholder «Continue this task…» is Latin and sat
-   right-aligned with its ellipsis on the wrong side, while the editor holds your Persian. */
-html[data-qrt-mode="smart"] [data-chat-composer] :is([contenteditable="true"], [data-chat-composer-placeholder]).qrt-en,
+/* Only the ghost text is judged as one block: it is one string. The editor under it holds
+   several hard lines and keeps `unicode-bidi: plaintext` from the base rule, so each line
+   takes its direction from that line — a verdict on the whole editor made one Latin letter
+   flip a Persian input to left-alignment (measured, and the reason this line is not here). */
+html[data-qrt-mode="smart"] [data-chat-composer] [data-chat-composer-placeholder].qrt-en,
 html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-en {
   direction: ltr;
   text-align: left;
@@ -113,7 +114,7 @@ html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-en {
 
 html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-fa,
 html[data-qrt-mode="smart"] [data-task-monitor-fixed-panel] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-fa,
-html[data-qrt-mode="smart"] [data-chat-composer] :is([contenteditable="true"], [data-chat-composer-placeholder]).qrt-fa,
+html[data-qrt-mode="smart"] [data-chat-composer] [data-chat-composer-placeholder].qrt-fa,
 html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-fa {
   direction: rtl;
   text-align: right;

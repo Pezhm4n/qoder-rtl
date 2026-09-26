@@ -287,14 +287,19 @@ function main() {
   check("the panel's prose is stamped for leading, not only given a direction",
     baseTags.filter((t) => /p|li|dd|dt|blockquote|figcaption|summary/.test(t)).every((t) => leadList.includes(`"${MON} ${t}"`)),
     leadList.includes(`"${MON} p"`) ? "panel p in LEAD_SELECTOR" : "panel p missing from LEAD_SELECTOR");
-  /* The composer half: pinned by the base rule since 1.6.0, classified only now — an English
-     placeholder had no .qrt-en to hand it back to LTR. */
-  check("the composer's editor and placeholder get a verdict, both ways",
-    blockList.includes('"[data-chat-composer] [contenteditable]"') &&
-      blockList.includes('"[data-chat-composer] [data-chat-composer-placeholder]"') &&
-      /html\[data-qrt-mode="smart"\] \[data-chat-composer\] :is\(\[contenteditable="true"\], \[data-chat-composer-placeholder\]\)\.qrt-en/.test(css) &&
-      /html\[data-qrt-mode="smart"\] \[data-chat-composer\] :is\(\[contenteditable="true"\], \[data-chat-composer-placeholder\]\)\.qrt-fa/.test(css),
-    JSON.stringify({ blockEditor: blockList.includes('"[data-chat-composer] [contenteditable]"'), smartEn: /placeholder\]\)\.qrt-en/.test(css) }));
+  /* The composer's ghost placeholder is one string, so it gets one verdict — measured on the
+     live window as the Latin «Continue this task…» sitting right-aligned with its ellipsis on
+     the wrong side. The *editor* is deliberately not classified: it holds several hard lines,
+     and a block-level verdict flipped the whole input to LTR over one Latin letter. The base
+     rule keeps it `rtl` + `unicode-bidi: plaintext`, which decides per line instead. */
+  check("the composer placeholder gets a verdict and the editor keeps per-line plaintext",
+    blockList.includes('"[data-chat-composer] [data-chat-composer-placeholder]"') &&
+      !blockList.includes('"[data-chat-composer] [contenteditable]"') &&
+      /html\[data-qrt-mode="smart"\] \[data-chat-composer\] \[data-chat-composer-placeholder\]\.qrt-en/.test(css) &&
+      /html\[data-qrt-mode="smart"\] \[data-chat-composer\] \[data-chat-composer-placeholder\]\.qrt-fa/.test(css) &&
+      !/html\[data-qrt-mode="smart"\] \[data-chat-composer\] :is\(\[contenteditable="true"\], \[data-chat-composer-placeholder\]\)\.qrt-en/.test(css) &&
+      /\[data-chat-composer\] :is\(textarea, \[contenteditable="true"\], \[data-chat-composer-placeholder\]\) \{\s*unicode-bidi: plaintext;/.test(css),
+    JSON.stringify({ editorInBlockList: blockList.includes('"[data-chat-composer] [contenteditable]"'), smartGhost: /\[data-chat-composer\] \[data-chat-composer-placeholder\]\.qrt-en/.test(css) }));
   check("the verdict measures the panel and the placeholder instead of assuming them",
     probe.includes("monitorText: monitor") && /var monitor = readSurface\(/.test(probe) &&
       probe.includes('taskMonitor: count("[data-task-monitor-fixed-panel]")') && /var ghost = readSurface\(/.test(probe),
@@ -302,6 +307,12 @@ function main() {
   check("the new row refuses to pass on a window that rendered neither surface",
     /surfaceShots\.length\s*\?[\s\S]{0,1800}:\s*null/.test(livejs) && livejs.includes("not rendered to measure"),
     (/const surfaceShots = [^\n]*/.exec(livejs) || [""])[0]);
+  /* The row must not ask the editor for a class — that demand is what made a single Latin
+     letter flip the whole input. It asks for an RTL box with per-line plaintext instead. */
+  check("the row scores the editor on per-line plaintext rather than on a verdict",
+    /editorOk\(a\.composerEditor\)/.test(livejs) && /bidi === "plaintext"/.test(livejs) &&
+      !/one\(a\.composerEditor\)/.test(livejs) && probe.includes("bidi: s.unicodeBidi"),
+    JSON.stringify({ editorOk: /editorOk\(a\.composerEditor\)/.test(livejs), bidiInProbe: probe.includes("bidi: s.unicodeBidi") }));
   /* And the fixture has to keep containing the surfaces, or these rows quietly degrade to
      "never measured" forever — the exact blind spot that hid the batch-8 defect. */
   const fixture = fs.readFileSync(path.join(__dirname, "fixtures", "chat.html"), "utf8");

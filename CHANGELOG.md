@@ -14,6 +14,24 @@ Two version numbers exist and they are **not** the same thing:
 Package 1.4.0 – 1.7.0 were never released: payloads 1.4.0–1.8.0 all shipped together in
 package 1.8.0.
 
+## [1.11.1] - 2026-09-26
+
+Payload **1.8.3**.
+
+### Fixed
+- **The chat input no longer flips to LTR over one Latin letter.** 1.11.0 gave the composer's
+  editor a block-level language verdict; measured on the fixture, typing a single `p` turned
+  the whole box `ltr/left`, and a Persian-English-Persian input right-aligned the English line
+  too. The editor now carries **no** verdict: it keeps `direction: rtl` with
+  `unicode-bidi: plaintext`, which gives **each hard line** its own base direction — the English
+  line lays out and aligns left while the Persian lines stay right (asserted from per-line
+  geometry, not from a computed style).
+- The ghost placeholder keeps its own verdict — that half of 1.11.0 was correct and stays.
+
+### Changed
+- The fifteenth audit line scores the editor on `rtl` + per-line plaintext instead of on a
+  direction class, and prints `editor=rtl/per-line`.
+
 ## [1.11.0] - 2026-09-26
 
 Payload **1.8.2**.

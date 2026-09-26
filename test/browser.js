@@ -195,9 +195,28 @@ async function settingsTest() {
         lead: Math.round(parseFloat(s.lineHeight) * 100) / 100,
         size: parseFloat(s.fontSize),
         dir: s.direction,
+        ub: s.unicodeBidi,
         align: s.textAlign === "start" ? (s.direction === "rtl" ? "right" : "left") : s.textAlign,
         cls: el.className.replace(/text-sm|leading-6|text-text|my-0/g, "").trim()
       };
+    };
+    /* Where each hard line of the composer actually lands inside its own box. A block-level
+       language verdict cannot express this: it decides for the whole input at once, which is
+       the regression the owner reported («one English letter flips everything»). */
+    var editorLines = function () {
+      var box = editor.getBoundingClientRect();
+      return [].slice.call(editor.childNodes)
+        .filter(function (n) { return n.nodeType === 3 && n.data.trim(); })
+        .map(function (n) {
+          var rg = document.createRange();
+          rg.selectNodeContents(n);
+          var r = rg.getBoundingClientRect();
+          return {
+            txt: n.data.slice(0, 18),
+            hugs: Math.abs(r.right - box.right) < Math.abs(r.left - box.left) ? "right" : "left",
+            firstLastOrder: r.right > r.left ? "forward" : "reverse"
+          };
+        });
     };
     api.apply({ lineHeight: 2.3, rtl: true, mode: "smart" });
     var smart = {
@@ -220,6 +239,7 @@ async function settingsTest() {
       /* The composer is where you type Persian *and* English, so a fixed RTL pin is wrong
          half the time: both its surfaces need their own verdict like any other block. */
       editor: ratio(editor),
+      editorLines: editorLines(),
       ghost: ratio(ghost),
       monFa: ratio(monFa),
       monEn: ratio(monEn),
@@ -279,8 +299,8 @@ async function settingsTest() {
            paragraph inside <details> raised these from 4/5 to 6/7 (the caption and the
            table cells are deliberately not classified — the tables switch owns those),
            and Qoder's own human turn — two bubbles, one per language — raised them to 7/8,
-           and the composer's two surfaces plus the task-monitor panel to 9/10. */
-        val.smart.fa === 9 &&
+           and the task-monitor panel to 9/10; taking the block-level verdict off the composer box again made it 8/10. */
+        val.smart.fa === 8 &&
         val.smart.en === 10,
       JSON.stringify(val.smart)
     );
@@ -310,10 +330,26 @@ async function settingsTest() {
        placeholder are RTL-pinned by the stylesheet but were never classified, so an English
        placeholder sat right-aligned with its ellipsis on the wrong side — and that placeholder
        only appears while a run is going on, which is what made it look streaming-specific. */
+    /* The composer is one box holding several lines, so a block-level verdict can only be
+       wrong for some of them — measured on the previous payload: a single Latin letter in an
+       otherwise empty input flipped the whole box to ltr/left. `unicode-bidi: plaintext`
+       already gives every hard line its own base direction, which is what the two checks
+       below measure — the box's class, and where each line actually lands. */
     check(
-      "the composer gets its own direction verdict",
-      val.smart.editor.dir === "rtl" && val.smart.editor.align === "right" && /qrt-fa/.test(val.smart.editor.cls),
+      "the composer box stays one RTL block with no language verdict of its own",
+      !/qrt-(fa|en)/.test(val.smart.editor.cls) &&
+        val.smart.editor.dir === "rtl" &&
+        val.smart.editor.align === "right" &&
+        val.smart.editor.ub === "plaintext",
       JSON.stringify(val.smart.editor)
+    );
+    check(
+      "each line of the composer keeps its own direction",
+      val.smart.editorLines.length === 3 &&
+        val.smart.editorLines[0].hugs === "right" &&
+        val.smart.editorLines[1].hugs === "left" &&
+        val.smart.editorLines[2].hugs === "right",
+      JSON.stringify(val.smart.editorLines)
     );
     check(
       "an all-Latin placeholder is not right-aligned",
@@ -603,7 +639,7 @@ async function geometryTest() {
         val.plain.ghost.dir === "ltr" &&
         /qrt-en/.test(val.plain.ghost.cls) &&
         val.plain.editor.dir === "rtl" &&
-        /qrt-fa/.test(val.plain.editor.cls),
+        !/qrt-(fa|en)/.test(val.plain.editor.cls),
       JSON.stringify({ ghost: val.plain.ghost, editor: val.plain.editor })
     );
 
