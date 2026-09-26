@@ -15,6 +15,22 @@
     "patcher"
   ],
   "license": "MIT",
+  "author": "Pezhman (https://github.com/Pezhm4n)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pezhm4n/qoder-persian-rtl.git"
+  },
+  "homepage": "https://github.com/Pezhm4n/qoder-persian-rtl#readme",
+  "bugs": {
+    "url": "https://github.com/Pezhm4n/qoder-persian-rtl/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/Pezhm4n"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "live.js",
   "bin": {
     "qoder-rtl": "cli.js",
@@ -41,7 +57,8 @@
     "restore": "node index.js --restore",
     "asar:status": "node index.js --status",
     "test": "node test/roundtrip.js && node test/live.js && node test/cli.js && node test/archive.js",
-    "test:browser": "node test/browser.js"
+    "test:browser": "node test/browser.js",
+    "shots": "node test/screenshot.js"
   },
   "devDependencies": {
     "@electron/asar": "^4.2.0"

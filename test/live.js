@@ -307,8 +307,8 @@ function main() {
   const fixture = fs.readFileSync(path.join(__dirname, "fixtures", "chat.html"), "utf8");
   check("the fixture carries the panel and a Latin placeholder",
     fixture.includes("data-task-monitor-fixed-panel") && /id="t-mon-fa"/.test(fixture) && /id="t-mon-en"/.test(fixture) &&
-      /data-chat-composer-placeholder[^>]*>[\s\S]{0,80}PLACEHOLDER FIXTURE ROW/.test(fixture),
-    JSON.stringify({ panel: fixture.includes("data-task-monitor-fixed-panel"), ghost: /PLACEHOLDER FIXTURE ROW/.test(fixture) }));
+      /data-chat-composer-placeholder[^>]*>[\s\S]{0,80}Continue this task/.test(fixture),
+    JSON.stringify({ panel: fixture.includes("data-task-monitor-fixed-panel"), ghost: /Continue this task/.test(fixture) }));
 
   check("dispose removes every inline leading stamp", /function clearLeading\([\s\S]*?\}\s*function applyConfig/.test(rtljs) && /function dispose\([\s\S]*clearLeading\(\)/.test(rtljs));
 

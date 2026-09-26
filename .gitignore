@@ -7,3 +7,10 @@ Qoder-RTL.cmd
 # local run artifacts
 *.log
 .recon/
+
+# npm pack / publish output
+*.tgz
+
+# staged archives and tool scratch dirs
+out/
+.qoder/
