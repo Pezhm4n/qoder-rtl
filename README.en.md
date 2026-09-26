@@ -4,29 +4,19 @@
 
 **Read and write Persian and Arabic in the Qoder desktop chat — without touching a single installed file, without breaking auto-updates, and with Vazirmatn bundled offline.**
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/qoder-rtl"><img alt="npm" src="https://img.shields.io/npm/v/qoder-rtl?style=flat-square&label=npm&labelColor=1f2328&color=0d7a5f"></a>
-  <a href="https://www.npmjs.com/package/qoder-rtl"><img alt="downloads" src="https://img.shields.io/npm/dm/qoder-rtl?style=flat-square&label=downloads&labelColor=1f2328&color=2f6feb"></a>
-  <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A5%2022-339933?style=flat-square&labelColor=1f2328&logo=node.js&logoColor=white">
-  <a href="./LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-red?style=flat-square&labelColor=1f2328"></a>
-  <img alt="install files untouched" src="https://img.shields.io/badge/installed_files-untouched-brightgreen?style=flat-square&labelColor=1f2328">
-  <img alt="tested on" src="https://img.shields.io/badge/tested_on-Qoder%200.3.3%20%C2%B7%20Windows%2010-6f42c1?style=flat-square&labelColor=1f2328">
-</p>
+[![npm](https://img.shields.io/npm/v/qoder-rtl?style=flat-square&label=npm&labelColor=1f2328&color=0d7a5f)](https://www.npmjs.com/package/qoder-rtl)
+[![downloads](https://img.shields.io/npm/dm/qoder-rtl?style=flat-square&label=downloads&labelColor=1f2328&color=2f6feb)](https://www.npmjs.com/package/qoder-rtl)
+![node](https://img.shields.io/badge/node-%E2%89%A5%2022-339933?style=flat-square&labelColor=1f2328&logo=node.js&logoColor=white)
+[![license](https://img.shields.io/badge/license-MIT-red?style=flat-square&labelColor=1f2328)](./LICENSE)
+![tested](https://img.shields.io/badge/tested%20on-Qoder%200.4.2%20%C2%B7%20Windows%2010-6f42c1?style=flat-square&labelColor=1f2328)
 
-<a href="#install">Install</a> · <a href="#features">Features</a> · <a href="#troubleshooting">Troubleshooting</a> · <a href="#scope">What stays LTR</a> · <a href="./README.md">فارسی</a> · <a href="./docs/REPORT.md">Technical report</a>
+[Install](#install) · [Features](#features) · [Troubleshooting](#troubleshooting) · [What stays LTR](#scope) · [فارسی](./README.md) · [Technical report](./docs/REPORT.md)
 
 </div>
 
-<table>
-<tr>
-<td width="50%" align="center"><b>Before</b> — Persian left-aligned, system font, code and prose fighting</td>
-<td width="50%" align="center"><b>After</b> — right-aligned, Vazirmatn, code still left-to-right</td>
-</tr>
-<tr>
-<td width="50%"><img src="./docs/images/before.png" alt="Before the patch" width="100%"></td>
-<td width="50%"><img src="./docs/images/after.png" alt="After the patch" width="100%"></td>
-</tr>
-</table>
+| Before: Persian left-aligned, system font, code and prose fighting | After: right-aligned, Vazirmatn, code still left-to-right |
+| :---: | :---: |
+| ![Before the patch](./docs/images/before.png) | ![After the patch](./docs/images/after.png) |
 
 Qoder — like most Electron apps — takes text direction from the **interface language**, not from the language you are typing in. So Persian lands left-aligned in the chat, parentheses and punctuation jump sides, and `Persian next to code` scrambles. This tool fixes exactly that, **in the chat and the composer only**; the rest of the app keeps its original look.
 
@@ -137,7 +127,7 @@ Because on Qoder 0.3.3 it bricked the app: `EnableEmbeddedAsarIntegrityValidatio
 <a id="verification"></a>
 ## Verification
 
-- `npm test` → **180** offline checks (payload shape, CLI behaviour and gates, staged-archive audit)
+- `npm test` → **181** offline checks (payload shape, CLI behaviour and gates, staged-archive audit)
 - `npm run test:browser` → **64** end-to-end checks against headless Chromium, including real mouse and keyboard events and rendered-geometry measurements
 - `node cli.js check` → **15** lines on a real Qoder window
 
@@ -155,7 +145,7 @@ Test commands, the red-first rule and the scope boundaries (what we deliberately
 
 <div align="center">
 
-<a href="./README.md">← نسخهٔ فارسی</a>
+[← نسخهٔ فارسی](./README.md)
 
 <br>
 
