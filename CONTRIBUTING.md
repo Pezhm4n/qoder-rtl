@@ -21,8 +21,8 @@ docs/REPORT.md    the audit history: what was measured, what was disproven, what
 
 ```bash
 npm test                 # 176 offline checks — no browser, no Qoder needed
-npm run test:browser     # 63 end-to-end checks against headless Chromium
-node cli.js check        # 15 lines against a real Qoder window (needs the debug port)
+npm run test:browser     # 74 end-to-end checks against headless Chromium
+node cli.js check        # 16 lines against a real Qoder window (needs the debug port)
 node cli.js diagnose     # read-only: what each block actually computed
 ```
 

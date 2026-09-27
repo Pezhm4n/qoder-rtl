@@ -281,6 +281,48 @@ async function settingsTest() {
           };
         });
     };
+    /* Per-line geometry inside a fenced-block card. The claim is "each line takes its own
+       direction", which no computed style can show: the box is one element with one
+       direction, so the measurement has to be a Range per line — where its first word and
+       its last word land, and which edge of the pre it hugs. */
+    var codeLines = function (id) {
+      var card = document.getElementById(id);
+      var pre = card && card.querySelector("pre");
+      var code = pre && pre.querySelector("code");
+      if (!code) return { error: "no code element in " + id };
+      var node = code.firstChild;
+      while (node && node.nodeType !== 3) node = node.nextSibling;
+      if (!node || !node.data.trim()) return { error: "no text node in " + id };
+      var box = pre.getBoundingClientRect();
+      var out = [];
+      var offset = 0;
+      node.data.split("\\n").forEach(function (line) {
+        var body = line.trim();
+        if (body) {
+          var start = offset + line.indexOf(body);
+          var first = /^\\S+/.exec(body)[0];
+          var last = /\\S+$/.exec(body)[0];
+          var rect = function (from, to) {
+            var rg = document.createRange();
+            rg.setStart(node, from);
+            rg.setEnd(node, to);
+            return rg.getBoundingClientRect();
+          };
+          var full = rect(start, start + body.length);
+          var head = rect(start, start + first.length);
+          var tail = rect(start + body.length - last.length, start + body.length);
+          out.push({
+            txt: body.slice(0, 14),
+            order: head.left > tail.left ? "rtl" : "ltr",
+            hugs: Math.abs(full.right - box.right) < Math.abs(full.left - box.left) ? "right" : "left",
+            ub: getComputedStyle(pre).unicodeBidi,
+            font: getComputedStyle(code).fontFamily
+          });
+        }
+        offset += line.length + 1;
+      });
+      return out;
+    };
     /* Which way the words actually land, as opposed to what the cascade says. A block can
        compute to direction:rtl and still be laid out left-to-right: unicode-bidi:plaintext
        takes the paragraph's base level from its first strong character (UAX #9 rule P2) and
@@ -352,7 +394,17 @@ async function settingsTest() {
       ledLong: visualOrder(ledLong),
       ledClass: { fa: /qrt-fa/.test(ledLatin.className), long: /qrt-fa/.test(ledLong.className) },
       mixedUl: getComputedStyle(mixedUl).direction,
-      enOl: getComputedStyle(enOl).direction
+      enOl: getComputedStyle(enOl).direction,
+      /* The fenced-block card, both placements: inside the assistant's markdown body and
+         as an attachment in the human bubble, which is the one the owner hit. */
+      cardAssistant: codeLines("t-card-assistant"),
+      cardUser: codeLines("t-card-user"),
+      /* The fixture's premise for the two rows above: the attachment card must sit OUTSIDE
+         the message-text hook, otherwise they quietly stop testing the case the owner hit. */
+      cardUserInText: (function () {
+        var c = document.getElementById("t-card-user");
+        return c ? c.closest("[data-chat-message-text]") !== null : null;
+      })()
     };
     api.apply({ mode: "off" });
     var off = {
@@ -363,6 +415,7 @@ async function settingsTest() {
       monFa: ratio(monFa),
       ghost: ratio(ghost),
       ledLatin: visualOrder(ledLatin),
+      cardUser: codeLines("t-card-user"),
       marks: document.querySelectorAll(".qrt-fa,.qrt-en").length,
       root: document.documentElement.getAttribute("data-qrt-mode")
     };
@@ -465,6 +518,46 @@ async function settingsTest() {
       "an all-Latin placeholder is not right-aligned",
       val.smart.ghost.dir === "ltr" && val.smart.ghost.align === "left" && /qrt-en/.test(val.smart.ghost.cls),
       JSON.stringify(val.smart.ghost)
+    );
+    /* The fenced-block card, in both placements. The second one is the owner's actual
+       complaint: a pasted fence becomes an attachment card that is NOT inside
+       [data-chat-message-text], so every descendant rule walked straight past it. */
+    const shape = (rows) => (Array.isArray(rows) ? rows.map((r) => r.hugs + "/" + r.order).join(" ") : JSON.stringify(rows));
+    /* What is asserted is the word ORDER per line, which is the defect the owner reported.
+       Alignment is deliberately not asserted for the Persian lines: measured in Chromium,
+       `text-align: start` resolves against the block's direction, so a Persian line inside
+       an LTR code block reads right-to-left but still sits at the left edge — exactly as a
+       code editor does. Pinning the block RTL to win the alignment would push every Latin
+       code line to the right instead, which is the worse trade. */
+    check(
+      "a fenced-block card gives each line its own reading order",
+      val.smart.cardAssistant.length === 3 &&
+        val.smart.cardAssistant[0].order === "rtl" &&
+        val.smart.cardAssistant[1].order === "ltr" &&
+        val.smart.cardAssistant[1].hugs === "left" &&
+        val.smart.cardAssistant[2].order === "rtl" &&
+        val.smart.cardAssistant[0].ub === "plaintext",
+      shape(val.smart.cardAssistant)
+    );
+    check(
+      "an attachment card outside the message text behaves the same",
+      val.smart.cardUserInText === false &&
+        val.smart.cardUser.length === 2 &&
+        val.smart.cardUser[0].ub === "plaintext" &&
+        val.smart.cardUser[0].order === "rtl" &&
+        val.smart.cardUser[1].order === "ltr" &&
+        val.smart.cardUser[1].hugs === "left",
+      JSON.stringify({ inText: val.smart.cardUserInText, lines: shape(val.smart.cardUser) })
+    );
+    check(
+      "Persian inside a code block resolves to the bundled face",
+      /Vazirmatn QRT/.test((val.smart.cardUser[0] || {}).font || "") && /Vazirmatn QRT/.test((val.smart.cardAssistant[0] || {}).font || ""),
+      JSON.stringify({ user: (val.smart.cardUser[0] || {}).font, assistant: (val.smart.cardAssistant[0] || {}).font })
+    );
+    check(
+      "turning direction off hands the code card back to the app",
+      val.off.cardUser.length === 2 && val.off.cardUser[0].ub === "normal" && val.off.cardUser[0].hugs === "left",
+      shape(val.off.cardUser)
     );
     /* The task-monitor panel: measured on the live window as Persian prose at direction:ltr
        inside [data-task-monitor-fixed-panel], filled during a run and collapsed after it. */

@@ -20,6 +20,10 @@
 | :---: | :---: |
 | ![Before the patch](./docs/images/before.png) | ![After the patch](./docs/images/after.png) |
 
+The patched Qoder window with the settings panel open
+
+![The patched Qoder window with the settings panel open](./docs/images/sample-photo.jpg)
+
 Qoder — like most Electron apps — takes text direction from the **interface language**, not from the language you are typing in. So Persian lands left-aligned in the chat, parentheses and punctuation jump sides, and `Persian next to code` scrambles. This tool fixes exactly that, **in the chat and the composer only**; the rest of the app keeps its original look.
 
 <a id="features"></a>
@@ -80,7 +84,7 @@ Fifteen `PASS/FAIL` lines, most of them **measurements of rendered output** (the
 | Command | What it does |
 |---|---|
 | `qoder-rtl` (no argument) | Connect or launch, inject, and keep the patch alive until `Ctrl+C` |
-| `qoder-rtl check` | Inject + the fifteen-line audit + a log file in `%LOCALAPPDATA%\qoder-persian-rtl\cdp-test.log` |
+| `qoder-rtl check` | Inject + the sixteen-line audit + a log file in `%LOCALAPPDATA%\qoder-persian-rtl\cdp-test.log` |
 | `qoder-rtl diagnose` | Read-only: what every text block actually **computed** to — the answer to "why is this line not RTL?" |
 | `qoder-rtl status` | Tool and payload version, Qoder version, and what the debug port really reports |
 | `qoder-rtl list` | The windows and targets DevTools can see |
@@ -129,9 +133,9 @@ Because on Qoder 0.3.3 it bricked the app: `EnableEmbeddedAsarIntegrityValidatio
 <a id="verification"></a>
 ## Verification
 
-- `npm test` → **195** offline checks (payload shape, CLI behaviour and gates, README guards, staged-archive audit)
-- `npm run test:browser` → **68** end-to-end checks against headless Chromium, including real mouse and keyboard events, rendered-geometry measurements and a hit-test of the closed panel
-- `node cli.js check` → **15** lines on a real Qoder window
+- `npm test` → **202** offline checks (payload shape, CLI behaviour and gates, README guards, staged-archive audit)
+- `npm run test:browser` → **74** end-to-end checks against headless Chromium, including real mouse and keyboard events, rendered-geometry measurements and a hit-test of the closed panel
+- `node cli.js check` → **16** lines on a real Qoder window
 
 Every new assertion is proven **red against the previous version** before it is trusted: a check that passes on broken code is not a check.
 

@@ -14,6 +14,54 @@ Two version numbers exist and they are **not** the same thing:
 Package 1.4.0 – 1.7.0 were never released: payloads 1.4.0–1.8.0 all shipped together in
 package 1.8.0.
 
+## [1.11.5] - 2026-09-27
+
+Payload **1.8.6**. (1.8.5 and 1.11.4 were already taken by the line-order fix that landed
+while this batch was in progress, so this batch moved up a number rather than sharing one.)
+
+### Fixed
+- **The `code.txt` card now follows the patch.** Reported as «توی کادرها اصلاً چیزی اعمال
+  نمی‌شه». The card is Qoder's ordinary fenced-block component (read from its bundle: the
+  header is `code.<language>`, so a ` ```text ` fence becomes `code.txt`), and a fenced block
+  pasted into the composer renders as an attachment **outside** `[data-chat-message-text]`, so
+  every descendant rule walked past it. Two separate causes, both measured:
+  - the mono stack (`ui-monospace, Cascadia Mono, Consolas, monospace`) has no Persian face,
+    so Persian inside a code block fell back glyph-by-glyph — that is the "nothing applied"
+    look. `Vazirmatn QRT` is now the last entry in both the default and the user-typed code
+    font stack, so Latin keeps the mono face and only the Persian glyphs come from Vazirmatn.
+  - a block of code was pinned as one LTR paragraph, so a Persian sentence inside it read with
+    mirrored parentheses. Block code now gets `unicode-bidi: plaintext`, which decides **per
+    line**: Latin code is untouched, a Persian line reads in the correct word order.
+  - Known and measured limit: the alignment stays with the block, so a Persian line in this
+    LTR box reads right-to-left but sits at the left edge, like a code editor. Pinning the box
+    RTL was tried and measured — it moved no Persian line and would drag every Latin line to
+    the right instead.
+- **Embedded web pages are left alone.** A page target is any document in the Electron
+  browser, and the payload reported its own version inside the owner's local dev site at
+  `http://127.0.0.1:8010/` opened in Qoder. Injection is now gated on `isAppDocument()`
+  before attaching: `http(s):`, `about:`, `blob:`, `data:` and `filesystem:` are skipped;
+  an empty url stays eligible because that is the undrawn Qoder window the retry loop waits on.
+
+### Verified
+- A **16th `--check` line** now measures a rendered fenced block on the live window: a `Range`
+  per line, comparing where that line's first and last word land, plus `unicode-bidi` and
+  whether the resolved font stack actually carries the Persian face. It reads `UNSURE` when the
+  conversation renders no multi-line block, and reports `outside-message-text` when the block it
+  found is an attachment card.
+- 4 new browser checks read the same per-line geometry in both placements — inside the
+  assistant's markdown body and as an attachment in the human bubble.
+- Negative control on a `git worktree` at the pre-fix commit (new tests, old payload): the row
+  fails with the defect's own words — `fa:ltr en:ltr fa:rtl ub=isolate faFace=n` — i.e. the
+  mixed Persian/Latin line really did read left-to-right before this change.
+- Two controls were wrong before they were right, and are recorded because both are the
+  project's failure mode: the first revert broke the whole stylesheet (a dangling selector)
+  instead of one rule, and the fixture's first Persian line was *pure* Persian, which reads
+  right-to-left under the old LTR pin too — so the order check could not tell the two builds
+  apart. Making that line mixed (`نرخ maxWidthPx را در چت ببین`) is what made it load-bearing.
+  One check also failed for a dumb reason first: the audit truncated the font-family string to
+  46 characters, which cut off `Vazirmatn` at the end of the stack, so a correct render read as
+  a failure. The probe now answers that question as a boolean.
+
 ## [1.11.4] - 2026-09-27
 
 Payload **1.8.5**.

@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.8.5";
+  var VERSION = "1.8.6";
   /* Kept equal to package.json "repository" by a test in test/live.js; the payload has
      no require(), so the link the panel's star button opens lives here as a literal. */
   var REPO_URL = "https://github.com/Pezhm4n/qoder-rtl";
@@ -249,9 +249,12 @@
       style.id = "qoder-rtl-vars";
       (document.head || root).appendChild(style);
     }
+    /* "Vazirmatn QRT" goes last in both branches: a code font the user types has no
+       Persian glyphs either, and a code block that mixes Latin and فارسی should fall
+       through to the bundled face instead of the engine's random per-glyph fallback. */
     var codeFont = cfg.codeFont
-      ? quoted(cfg.codeFont) + ',ui-monospace,"Cascadia Mono",Consolas,monospace'
-      : 'ui-monospace,"Cascadia Mono",Consolas,monospace';
+      ? quoted(cfg.codeFont) + ',ui-monospace,"Cascadia Mono",Consolas,"Vazirmatn QRT",monospace'
+      : 'ui-monospace,"Cascadia Mono",Consolas,"Vazirmatn QRT",monospace';
 
     /* Every declaration here is !important on purpose, and not for the usual reason.
        rtl.css also declares these properties on :root, with their defaults, so whichever

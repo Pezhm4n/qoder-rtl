@@ -219,6 +219,19 @@ function portObservations(state, qoder, records, startedAt) {
 
 /* ---------- the injector ---------- */
 
+/* Only the app's own renderer documents are patched. A page target is *any* document in
+   the Electron browser, so an embedded web view is one too — measured on the owner's
+   install, where the payload reported its own version inside their local dev site at
+   http://127.0.0.1:8010/ and restyled a page that has nothing to do with this tool.
+   An empty url stays eligible: that is the undrawn Qoder window retrySkipped() waits on. */
+function isAppDocument(url) {
+  const u = String(url || "").trim();
+  if (/^https?:/i.test(u)) return false;
+  if (/^about:/i.test(u)) return false;
+  if (/^(blob|data|filesystem):/i.test(u)) return false;
+  return true;
+}
+
 class Injector {
   constructor(conn, flags) {
     this.conn = conn;
@@ -263,6 +276,10 @@ class Injector {
 
   async onAttach(sessionId, info) {
     if (!info || info.type !== "page" || this.sessions.has(sessionId)) return;
+    if (!isAppDocument(info.url)) {
+      say(this.flags, `  left alone (not the app's own document): ${String(info.url).slice(0, 90)}`);
+      return;
+    }
     /* busy is what tells a window that is still being attached from one that failed to
        be patched: auto-attach runs on its own clock, so report() can meet a session
        whose Page calls have not answered yet. */
@@ -429,6 +446,8 @@ function verdictRows(reports) {
   /* Windows where the batch-9 surfaces actually exist to measure: the task-monitor panel is
      closed most of the time, and a window with no composer renders no placeholder. */
   const surfaceShots = answered.filter((r) => r.applied && (r.applied.monitorText || r.applied.composerGhost || r.applied.composerEditor));
+  /* A fenced block with at least two hard lines is the only card whose lines can disagree. */
+  const cardShots = answered.filter((r) => r.applied && r.applied.codeCard && Array.isArray(r.applied.codeCard.lines) && r.applied.codeCard.lines.length >= 2);
   return [
     { name: "page targets visible over CDP", pass: reports.length > 0, detail: `${reports.length} target(s)` },
     { name: "probes answered", pass: !unknown && reports.length > 0, detail: unknown ? reports.map((r) => r.error).filter(Boolean).join(" / ") || "—" : `${answered.length}/${reports.length}` },
@@ -578,6 +597,31 @@ function verdictRows(reports) {
             })
             .join(" | ")
         : answered.map((r) => `panel nodes=${r.hooks ? r.hooks.taskMonitor : "?"}, composer nodes=${r.hooks ? r.hooks.composer : "?"}`).join(" | ") || "—"
+    },
+    {
+      /* Batch 12, from «توی کادرهای code.txt هیچی اعمال نمیشه». A fenced block is ONE element
+         with one computed direction, so the only honest live measurement is a Range per line:
+         where that line's first and last word are drawn. A line that opens Persian must run
+         right-to-left and a line that opens Latin the other way, in a box that is plaintext
+         and whose font stack carries the bundled face. */
+      name: cardShots.length ? "a fenced-block card reads line by line" : "fenced-block card (no multi-line code rendered to measure)",
+      pass: cardShots.length
+        ? cardShots.some((r) => {
+            const c = r.applied.codeCard;
+            if (!c || c.error || !Array.isArray(c.lines)) return false;
+            if (r.applied.mode === "off") return true; /* reversal is scored by its own row */
+            return c.ub === "plaintext" && c.faFace === true && c.lines.every((l) => (l.lead === "fa" ? l.o === "rtl" : l.o === "ltr"));
+          })
+        : null,
+      detail: cardShots.length
+        ? cardShots
+            .map((r) => {
+              const c = r.applied.codeCard;
+              if (!c || c.error) return `probe error ${(c && c.error) || "absent"}`;
+              return `${c.lines.length} line(s) ${c.lines.map((l) => l.lead + ":" + l.o).join(" ")} ub=${c.ub} faFace=${c.faFace ? "y" : "n"}${c.outsideMessageText ? " outside-message-text" : ""}`;
+            })
+            .join(" | ")
+        : answered.map((r) => (r.applied && r.applied.code ? "inline code only, no multi-line block" : "no code rendered")).join(" | ") || "—"
     },
     row(
       "chat DOM hooks reachable",

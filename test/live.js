@@ -260,6 +260,43 @@ function main() {
       termjs.includes("process.stdout.isTTY"),
     (termjs.match(/function enabled\(\)[^\n]*/) || [""])[0]);
 
+  /* ---- batch 12: the fenced-block card and the pages that are not the app ---- */
+  const fixtureSrc = fs.readFileSync(path.join(__dirname, "fixtures", "chat.html"), "utf8");
+  check("the code rules also reach a card outside the message-text hook",
+    /\[class\*="group\/code-block"\][^\n]*\{[\s\S]{0,200}unicode-bidi: plaintext/.test(css.replace(/\n\s*\n/g, "\n")) ||
+      css.includes('[class*="group/code-block"] :is(pre, code)') && css.includes("unicode-bidi: plaintext !important"),
+    (css.match(/\/\*[^]*?group\/code-block[^]*?\n\}/) || [""])[0].slice(0, 120));
+  check("off mode returns the code card to the app's own bidi",
+    /html\[data-qrt-mode="off"\][^{]*group\/code-block[^{]*\{[^}]*unicode-bidi: normal/.test(css),
+    (css.match(/html\[data-qrt-mode="off"\][^\n]*/) || [""])[0]);
+  check("the code font stack keeps a Persian face for glyphs mono cannot draw",
+    /--qrt-code:[^;]*"Vazirmatn QRT", monospace/.test(css) &&
+      (rtljs.match(/ui-monospace,"Cascadia Mono",Consolas,"Vazirmatn QRT",monospace/g) || []).length === 2,
+    (css.match(/--qrt-code:[^\n]*/) || [""])[0]);
+  /* A page target is any document in the Electron browser. The owner's own dev site,
+     opened inside Qoder, came back patched — so the gate has to be in the attach path
+     itself, not only in the first pass over getTargets. */
+  check("injection is gated to the app's own documents before attaching",
+    /function isAppDocument\(url\)/.test(livejs) &&
+      /\^https\?:/.test(livejs) &&
+      livejs.indexOf("isAppDocument(info.url)") < livejs.indexOf('await this.conn.send("Page.enable"'),
+    (livejs.match(/if \(!isAppDocument[^\n]*/) || [""])[0]);
+  check("the fixture carries the card in both placements",
+    /id="t-card-user"/.test(fixtureSrc) && /id="t-card-assistant"/.test(fixtureSrc) && (fixtureSrc.match(/group\/code-block/g) || []).length >= 2,
+    (fixtureSrc.match(/id="t-card-[a-z]+"/g) || []).join(" "));
+  /* The 16th audit line has to be able to say "I could not measure", and it has to score
+     the thing no style read can show: a Range per line. */
+  check("the card row refuses to pass when no multi-line block is rendered",
+    /name: cardShots\.length \? "a fenced-block card reads line by line" : "fenced-block card \(no multi-line code rendered to measure\)"/.test(livejs) &&
+      /pass: cardShots\.length[\s\S]{0,900}: null,/.test(livejs) &&
+      /const cardShots = answered\.filter/.test(livejs),
+    (/name: cardShots\.length[^\n]*/.exec(livejs) || [""])[0]);
+  check("the card row scores per-line geometry and the bundled face, not a class",
+    /c\.ub === "plaintext" && c\.faFace === true && c\.lines\.every\(\(l\) => \(l\.lead === "fa" \? l\.o === "rtl" : l\.o === "ltr"\)\)/.test(livejs) &&
+      /faFace: \/Vazirmatn\/\.test\(String\(ps\.fontFamily\)\)/.test(payloadjs) &&
+      /lead: \(function \(\)/.test(payloadjs),
+    (/return c\.ub === "plaintext"[^\n]*/.exec(livejs) || [""])[0]);
+
   /* ---- batch 8: the human turn. Qoder renders your own message as one div with the text
        hanging directly on it — no `.markdown-body`, no `<p>` — so every rule that descended
        from `[data-chat-message-text]` walked past it and the classifier never saw it. The

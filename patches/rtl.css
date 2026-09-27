@@ -16,7 +16,11 @@
 
 :root {
   --qrt-fa: "Vazirmatn QRT";
-  --qrt-code: ui-monospace, "Cascadia Mono", Consolas, "Segoe UI Mono", monospace;
+  /* Persian last: Latin, digits and punctuation keep coming from the mono faces, and only
+     the glyphs no mono face carries (فارسی) fall through to Vazirmatn. Without it a code
+     block holding Persian renders glyph-by-glyph from whatever the engine grabs, which is
+     what made the owner's `code.txt` card look untouched. */
+  --qrt-code: ui-monospace, "Cascadia Mono", Consolas, "Segoe UI Mono", "Vazirmatn QRT", monospace;
   --qrt-zoom: 1;
   --qrt-code-scale: 1;
   --qrt-leading: 1.75;
@@ -222,9 +226,11 @@ html[data-qrt-reverse] [data-chat-message-text] table {
 
 /* ------------------------------------------------------------ LTR islands */
 
-[data-chat-message-text] :is(pre, code, kbd, samp, var, output),
+/* Inline islands keep a hard LTR base with `isolate`, so a code span inside a Persian
+   sentence cannot drag its neighbours' punctuation across. */
+[data-chat-message-text] :is(code, kbd, samp, var, output),
 [data-chat-message-text] :is(pre, code) *,
-[data-chat-composer] :is(code, pre, kbd, samp),
+[data-chat-composer] :is(code, kbd, samp),
 [data-chat-message-text] :is([data-code-editor], .monaco-editor, .cm-editor, .xterm),
 [data-chat-message-text] :is([data-file-path], [class*="file-path"]),
 [data-chat-message-text] :is([data-language], [class*="shiki"], [class*="token-"]),
@@ -232,6 +238,28 @@ html[data-qrt-reverse] [data-chat-message-text] table {
   direction: ltr !important;
   text-align: left !important;
   unicode-bidi: isolate !important;
+  font-family: var(--qrt-code) !important;
+}
+
+/* A block of code is not one paragraph: `plaintext` lets each line take its own base
+   direction from its own content, which is what the composer already does (batch 10).
+   A line of Latin code is unaffected — its first strong character is Latin — while a
+   Persian sentence pasted into a ```text fence reads in the right word order instead of
+   arriving with its parentheses mirrored. Measured in Chromium, and worth stating: the
+   ALIGNMENT stays with the block (`text-align: start` resolves against the box's own
+   direction), so a Persian line in this LTR box reads RTL but sits at the left edge,
+   like a code editor. Flipping the box to rtl was tried and measured — it moves no
+   Persian line and would drag every Latin code line to the right, so the box stays ltr.
+   `[class*="group/code-block"]` is Qoder's own wrapper (read from its bundle: the card
+   is titled `code.<language>`), and it is spelled here because a fenced block that the
+   composer turns into an attachment renders OUTSIDE [data-chat-message-text]. */
+[data-chat-message-text] pre,
+[class*="group/code-block"] :is(pre, code),
+[data-chat-composer] pre,
+[class*="group/code-block"] {
+  direction: ltr !important;
+  text-align: start !important;
+  unicode-bidi: plaintext !important;
   font-family: var(--qrt-code) !important;
 }
 
@@ -244,7 +272,8 @@ html[data-qrt-reverse] [data-chat-message-text] table {
    Deliberately only the code-ish tags: `.monaco-editor`/`.cm-editor`/`.xterm` measure
    pixels for their own layout and would take a second zoom badly. */
 [data-chat-message-text] :is(pre, code, kbd, samp, var, output),
-[data-chat-composer] :is(code, pre, kbd, samp) {
+[data-chat-composer] :is(code, pre, kbd, samp),
+[class*="group/code-block"] :is(pre, code) {
   zoom: var(--qrt-code-scale);
 }
 
@@ -254,6 +283,6 @@ html[data-qrt-reverse] [data-chat-message-text] table {
   padding-inline: 0.32em;
 }
 
-html[data-qrt-mode="off"] [data-chat-message-text] :is(pre, code) {
+html[data-qrt-mode="off"] :is([data-chat-message-text], [class*="group/code-block"]) :is(pre, code) {
   unicode-bidi: normal !important;
 }

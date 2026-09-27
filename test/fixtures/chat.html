@@ -217,6 +217,18 @@
                 <p>عددهای خام در جدول بالا هستند.</p>
               </details>
               <pre><code>const x = 1; // این کامنت نباید به هم بریزد</code></pre>
+              <!-- Qoder's real fenced-block card, read from its own bundle: the header is
+                       titled `code.<language>` (`code.${F1}` in index-*.js), the body is a
+                       pre>code inside div.group/code-block. Three hard lines, because the
+                       claim under test is per-line direction, not one verdict for the box. -->
+              <div id="t-card-assistant" class="group/code-block my-3 overflow-hidden rounded-lg">
+                <div class="flex items-center gap-2 px-3 py-2 text-[12px] text-text-secondary"><span>code.txt</span></div>
+                <div class="overflow-auto px-4 py-3">
+                  <pre class="m-0 min-w-full bg-transparent font-mono text-[13px] font-normal leading-6 antialiased"><code class="relative block">نرخ maxWidthPx را در چت ببین
+put this in english
+خداحافظ فارسی</code></pre>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -230,6 +242,18 @@
         <div data-chat-turn="2">
           <div class="relative flex items-end justify-end" data-message-kind="user" data-user-message data-user-bubble>
             <div id="t-user-fa" class="text-xs font-normal leading-4 text-text whitespace-pre-wrap break-words" data-part-index="0" data-part-type="text" data-chat-message-text>سلام! ممنون می‌شم جدول سرعت را دوباره بسازی، این لینک هم ببین: <a href="#">qoder.com/docs</a></div>
+            <!-- The owner's real case: pasting a fenced block into the composer turns it
+                 into an attachment card that renders as a SIBLING of the message text, so
+                 every `[data-chat-message-text] …` rule walks straight past it. The card
+                 still has to behave, which is why the code rules also name the app's own
+                 `group/code-block` wrapper. -->
+            <div id="t-card-user" class="group/code-block my-3 overflow-hidden rounded-lg">
+              <div class="flex items-center gap-2 px-3 py-2 text-[12px] text-text-secondary"><span>code.txt</span></div>
+              <div class="overflow-auto px-4 py-3">
+                <pre class="m-0 min-w-full bg-transparent font-mono text-[13px] font-normal leading-6 antialiased"><code class="relative block">متنِ فارسیِ کوتاه
+short english line</code></pre>
+              </div>
+            </div>
           </div>
         </div>
         <div data-chat-turn="3">
