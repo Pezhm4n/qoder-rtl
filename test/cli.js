@@ -58,9 +58,11 @@ async function main() {
   check("tests are not published", !pkg.files.some((f) => /test/.test(f)) && pkg.files.every((f) => fs.existsSync(path.join(ROOT, f))), JSON.stringify(pkg.files));
   check("main is the CDP engine, not the archive patcher", pkg.main === "live.js", String(pkg.main));
   /* ---------- the READMEs are the storefront: nav anchors and pictures must resolve ----------
-     Both of these shipped broken once: an anchor wrapped in backticks renders as literal
-     `<a id="…">` text and its nav link jumps nowhere, and a picture the tarball does not
-     carry is a broken image on the npm page (npm renders the README from the package). */
+     Anchors and paths are checked against the repository, which is where the README is read.
+     A fenced anchor shipped once as literal `<a id="…">` text with every nav link dead; a
+     picture linked but never committed renders broken for everyone but the author's machine.
+     Whether a picture is inside the npm tarball is a separate, deliberate question — see the
+     lean-package check below. */
   const BT = String.fromCharCode(96);
   const ships = (p) => pkg.files.some((f) => p === "./" + f || p.startsWith("./" + f + "/"));
   for (const file of ["README.md", "README.en.md"]) {
@@ -79,9 +81,13 @@ async function main() {
     );
     const local = [...doc.matchAll(/!\[[^\]]*\]\((\.\/[^)]+)\)/g), ...doc.matchAll(/<img[^>]+src="(\.\/[^"]+)"/g)].map((m) => m[1]);
     const absent = local.filter((p) => !fs.existsSync(path.join(ROOT, p.slice(2))));
-    const unstored = local.filter((p) => !ships(p));
+    const unstored = local.filter((p) => ships(p));
     check(`${file}: every picture exists and is referenced by path`, local.length >= 3 && absent.length === 0, JSON.stringify({ local, absent }));
-    check(`${file}: every picture ships inside the npm tarball`, unstored.length === 0, JSON.stringify(unstored));
+    /* The owner's decision, pinned so nobody "fixes" it back: the package stays lean, so
+       the README pictures live in the repository and the npm page shows none of them.
+       Without this check a future edit to `files` would quietly add ~250 kB to every
+       install for a screenshot nobody reads in a terminal. */
+    check(`${file}: no picture ships inside the npm tarball`, unstored.length === 0, JSON.stringify(unstored));
   }
   /* "main" is also the require() entry, so a plain require must not open a CDP connection.
      If the engine still self-boots, the child never exits and the timeout kills it. */

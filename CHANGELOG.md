@@ -42,6 +42,15 @@ while this batch was in progress, so this batch moved up a number rather than sh
   before attaching: `http(s):`, `about:`, `blob:`, `data:` and `filesystem:` are skipped;
   an empty url stays eligible because that is the undrawn Qoder window the retry loop waits on.
 
+### Changed
+- **The package stays lean: no pictures inside the tarball.** 1.11.3 had added
+  `docs/images` to `files` so the npm page would render the screenshots (280.0 kB / 22
+  files, and the new sample photo pushed that to 412.0 kB / 23). The owner chose the opposite
+  trade, so the images are out again — measured at **182.5 kB compressed / 332.3 kB unpacked /
+  19 files**. The npm page shows no screenshots; GitHub, where the README is actually read,
+  still does. A check now asserts that no README picture ships, so the 250 kB cannot creep
+  back in on a well-meaning "fix".
+
 ### Verified
 - A **16th `--check` line** now measures a rendered fenced block on the live window: a `Range`
   per line, comparing where that line's first and last word land, plus `unicode-bidi` and

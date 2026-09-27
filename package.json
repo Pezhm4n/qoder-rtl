@@ -43,7 +43,6 @@
     "lib",
     "patches",
     "assets",
-    "docs/images",
     "README.md"
   ],
   "scripts": {
