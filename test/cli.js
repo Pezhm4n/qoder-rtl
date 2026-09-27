@@ -79,14 +79,35 @@ async function main() {
       wanted.length >= 4 && wanted.every((w) => targets.has(w)),
       JSON.stringify({ wanted, missing: wanted.filter((w) => !targets.has(w)) })
     );
-    const local = [...doc.matchAll(/!\[[^\]]*\]\((\.\/[^)]+)\)/g), ...doc.matchAll(/<img[^>]+src="(\.\/[^"]+)"/g)].map((m) => m[1]);
-    const absent = local.filter((p) => !fs.existsSync(path.join(ROOT, p.slice(2))));
-    const unstored = local.filter((p) => ships(p));
-    check(`${file}: every picture exists and is referenced by path`, local.length >= 3 && absent.length === 0, JSON.stringify({ local, absent }));
+    /* Pictures are addressed through raw.githubusercontent.com, not `./docs/images/…`.
+       The tarball is lean (the check below pins the owner's decision), and the npm page can
+       only render what ships — so a relative path read fine on GitHub and broke on npm.
+       Both forms are still resolved against this repository: a picture that was never
+       committed is broken wherever the URL points. */
+    const RAW = `https://raw.githubusercontent.com/${String(pkg.repository.url || pkg.repository).replace(/^git\+https?:\/\/github\.com\//, "").replace(/\.git$/, "")}/main/`;
+    const pictures = [...doc.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g), ...doc.matchAll(/<img[^>]+src="([^"]+)"/g)]
+      .map((m) => m[1])
+      .filter((p) => /\.(png|jpe?g|webp|gif|svg)$/i.test(p));
+    const repoPath = (p) => (p.startsWith(RAW) ? p.slice(RAW.length) : p.startsWith("./") ? p.slice(2) : null);
+    const offStore = pictures.filter((p) => repoPath(p) === null);
+    const relative = pictures.filter((p) => p.startsWith("./"));
+    const absent = pictures.filter((p) => {
+      const r = repoPath(p);
+      return r !== null && !fs.existsSync(path.join(ROOT, r));
+    });
+    check(
+      `${file}: every picture exists and is addressed by a URL the repository can back`,
+      pictures.length >= 3 && offStore.length === 0 && absent.length === 0 && relative.length === 0,
+      JSON.stringify({ pictures, offStore, absent, relative })
+    );
+    const unstored = pictures.filter((p) => {
+      const r = repoPath(p);
+      return r !== null && ships("./" + r);
+    });
     /* The owner's decision, pinned so nobody "fixes" it back: the package stays lean, so
-       the README pictures live in the repository and the npm page shows none of them.
-       Without this check a future edit to `files` would quietly add ~250 kB to every
-       install for a screenshot nobody reads in a terminal. */
+       the README pictures live in the repository and are fetched from GitHub by whoever
+       renders the README. Without this check a future edit to `files` would quietly add
+       ~250 kB to every install for a screenshot nobody reads in a terminal. */
     check(`${file}: no picture ships inside the npm tarball`, unstored.length === 0, JSON.stringify(unstored));
   }
   /* "main" is also the require() entry, so a plain require must not open a CDP connection.

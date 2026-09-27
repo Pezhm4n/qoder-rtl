@@ -14,6 +14,28 @@ Two version numbers exist and they are **not** the same thing:
 Package 1.4.0 – 1.7.0 were never released: payloads 1.4.0–1.8.0 all shipped together in
 package 1.8.0.
 
+## [1.11.6] - 2026-09-27
+
+Payload unchanged (1.8.6). Nothing in the patch itself moved — this release is about the
+storefront and the tarball.
+
+### Fixed
+- **The npm page can show the screenshots again while the package stays lean.** 1.11.5
+  dropped `docs/images` from `files`, but both READMEs still addressed the pictures as
+  `./docs/images/…` — a path the npm page cannot follow, because it can only render what
+  ships. So the lean package and the storefront contradicted each other, and the guard even
+  enforced the contradiction (it collected only relative refs, so it saw zero pictures to
+  worry about). Both READMEs now point at
+  `https://raw.githubusercontent.com/Pezhm4n/qoder-rtl/main/docs/images/…`, which GitHub and
+  npm can each fetch, and `test/cli.js` was rewritten to resolve **both** forms against this
+  repository: a picture that was never committed still fails the check, a relative path is
+  now itself the failure, and the lean-tarball rule keeps working on the new URLs.
+- **Publishing was blocked, and not by the tool.** `npm publish` answered
+  `cannot publish over the previously published versions: 1.11.5` — that version was already
+  on the registry, carrying payload 1.8.6 with the line-order and `code.txt` card fixes, so
+  nobody was missing a patch. The only difference between the published artifact and `main`
+  was the `files` array, which is exactly what this release delivers.
+
 ## [1.11.5] - 2026-09-27
 
 Payload **1.8.6**. (1.8.5 and 1.11.4 were already taken by the line-order fix that landed

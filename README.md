@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./docs/images/qoder.webp" alt="لوگوی Qoder" width="88" height="88">
+<img src="https://raw.githubusercontent.com/Pezhm4n/qoder-rtl/main/docs/images/qoder.webp" alt="لوگوی Qoder" width="88" height="88">
 
 # Qoder Persian RTL
 
@@ -25,11 +25,11 @@
 | قبل | بعد |
 | :---: | :---: |
 | فارسیِ چپ‌چین، فونتِ پیش‌فرض، کد و متن قاطی | راست‌چین، وزیرمتن، کد همچنان چپ‌به‌راست |
-| ![قبل از پچ](./docs/images/before.png) | ![بعد از پچ](./docs/images/after.png) |
+| ![قبل از پچ](https://raw.githubusercontent.com/Pezhm4n/qoder-rtl/main/docs/images/before.png) | ![بعد از پچ](https://raw.githubusercontent.com/Pezhm4n/qoder-rtl/main/docs/images/after.png) |
 
 همراه پنلِ تنظیمات:
 
-![پنجرهٔ پچ‌شدهٔ Qoder با پنلِ تنظیماتِ باز](./docs/images/sample-photo.jpg)
+![پنجرهٔ پچ‌شدهٔ Qoder با پنلِ تنظیماتِ باز](https://raw.githubusercontent.com/Pezhm4n/qoder-rtl/main/docs/images/sample-photo.jpg)
 
 Qoder — مثل بیشترِ اپ‌های Electron — جهتِ متن را از زبانِ رابطِ کاربری می‌گیرد، نه از زبانِ چیزی که تایپ می‌کنید. نتیجه: فارسی در چت چپ‌چین می‌نشیند، پرانتزها و علامت‌ها جابه‌جا می‌شوند، و متنِ فارسیِ کنارِ کد به‌هم می‌ریزد. این ابزار همین را حل می‌کند — **فقط در چت و کادرِ نوشتن**؛ بقیهٔ برنامه دست‌نخورده می‌ماند.
 

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./docs/images/qoder.webp" alt="Qoder logo" width="88" height="88">
+<img src="https://raw.githubusercontent.com/Pezhm4n/qoder-rtl/main/docs/images/qoder.webp" alt="Qoder logo" width="88" height="88">
 
 # Qoder Persian RTL
 
@@ -18,11 +18,11 @@
 
 | Before: Persian left-aligned, system font, code and prose fighting | After: right-aligned, Vazirmatn, code still left-to-right |
 | :---: | :---: |
-| ![Before the patch](./docs/images/before.png) | ![After the patch](./docs/images/after.png) |
+| ![Before the patch](https://raw.githubusercontent.com/Pezhm4n/qoder-rtl/main/docs/images/before.png) | ![After the patch](https://raw.githubusercontent.com/Pezhm4n/qoder-rtl/main/docs/images/after.png) |
 
 The patched Qoder window with the settings panel open
 
-![The patched Qoder window with the settings panel open](./docs/images/sample-photo.jpg)
+![The patched Qoder window with the settings panel open](https://raw.githubusercontent.com/Pezhm4n/qoder-rtl/main/docs/images/sample-photo.jpg)
 
 Qoder — like most Electron apps — takes text direction from the **interface language**, not from the language you are typing in. So Persian lands left-aligned in the chat, parentheses and punctuation jump sides, and `Persian next to code` scrambles. This tool fixes exactly that, **in the chat and the composer only**; the rest of the app keeps its original look.
 
