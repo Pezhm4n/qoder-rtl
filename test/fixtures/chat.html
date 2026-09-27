@@ -173,6 +173,16 @@
                        five Latin letters of this line and made it right-aligned. Written
                        as entities so the fixture source stays readable. -->
               <p id="t-bom" class="my-0 text-sm leading-6 text-text">&#xFEFF;&#xFEFF;&#xFEFF;&#xFEFF;hello</p>
+              <!-- The owner's report, from a real reply: a Persian paragraph that OPENS with a
+                   Latin name. The classifier gives it .qrt-fa and the computed `direction` really
+                   is rtl — but `unicode-bidi: plaintext` takes the paragraph's base direction from
+                   its first strong character (UAX #9 P2), which is the Latin "Q", so the sentence
+                   was laid out left-to-right anyway. Computed style cannot see that; only the
+                   visual order of the words can, which is what test/browser.js measures here.
+                   One line short enough to sit on a single visual line, plus a realistic
+                   multi-line one with inline code in the opening position. -->
+              <p id="t-led-latin" class="my-0 text-sm leading-6 text-text">Qoder Persian RTL یک ابزار فارسی است.</p>
+              <p id="t-led-long" class="my-0 text-sm leading-6 text-text">Qoder Persian RTL (<code>qoder-rtl</code>) یک CLI کوچک Node.js است که فارسی را در چت Qoder راست&zwnj;چین می&zwnj;کند و کد را چپ&zwnj;به&zwnj;راست نگه می&zwnj;دارد.</p>
               <!-- Column order is set by the direction on the TABLE element, so these ids
                        are what lets the browser test measure whether the reverse-columns
                        toggle moves a column at all instead of only rewriting CSS text. -->

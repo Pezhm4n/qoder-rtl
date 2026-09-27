@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.8.4";
+  var VERSION = "1.8.5";
   /* Kept equal to package.json "repository" by a test in test/live.js; the payload has
      no require(), so the link the panel's star button opens lives here as a literal. */
   var REPO_URL = "https://github.com/Pezhm4n/qoder-rtl";

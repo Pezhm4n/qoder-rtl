@@ -14,6 +14,29 @@ Two version numbers exist and they are **not** the same thing:
 Package 1.4.0 – 1.7.0 were never released: payloads 1.4.0–1.8.0 all shipped together in
 package 1.8.0.
 
+## [1.11.4] - 2026-09-27
+
+Payload **1.8.5**.
+
+### Fixed
+- **A Persian paragraph that opens with a Latin name now reads right-to-left.** Reported on
+  a live reply: the Persian body of an answer was right-aligned but its words still ran
+  left-to-right, so the sentence opened with `Qoder Persian RTL` and ended with the verb.
+  The classifier had been right all along — the block got `.qrt-fa`, `direction: rtl` and
+  `text-align: right` — but the base rule left `unicode-bidi: plaintext` on it, and under
+  UAX #9 rule P2 plaintext takes the paragraph's base level from its **first strong
+  character** and ignores `direction` for that decision. A Latin first word therefore set the
+  whole paragraph LTR, whatever the verdict said. Both smart-mode classes now carry
+  `unicode-bidi: isolate`, which hands the paragraph level back to `direction`; force mode
+  gets the same treatment for prose (its composer is left on per-line plaintext on purpose).
+  The composer's editor is unchanged: it holds several hard lines and has no verdict of its
+  own. This is the case the README has promised since 1.0 and never measured.
+- **Why 52 browser checks missed it:** every one of them read `getComputedStyle`, and
+  `direction` really was `rtl`. The new checks measure geometry instead — the rectangle of a
+  block's leading word against its trailing word — which is the only probe that can tell a
+  right-aligned LTR paragraph from an RTL one. Two fixture paragraphs were added for it, one
+  short and one long with inline code in the opening position.
+
 ## [1.11.3] - 2026-09-27
 
 Payload **1.8.4**.

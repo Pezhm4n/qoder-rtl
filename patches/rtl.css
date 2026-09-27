@@ -110,6 +110,14 @@ html[data-qrt-mode="smart"] [data-chat-composer] [data-chat-composer-placeholder
 html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-en {
   direction: ltr;
   text-align: left;
+  /* A block with a verdict of its own may not leave its base direction to the bidi
+     algorithm: `unicode-bidi: plaintext` takes it from the first strong character (UAX #9
+     P2) and ignores `direction` for that decision, so a Persian paragraph opening with a
+     Latin name kept reading left-to-right while direction and text-align both computed to
+     what the classifier asked for. isolate hands the paragraph level back to `direction`.
+     It has to appear on both classes: an English block whose first character is a Persian
+     quote would otherwise be flipped the other way, for the same reason. */
+  unicode-bidi: isolate;
 }
 
 html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-fa,
@@ -118,6 +126,7 @@ html[data-qrt-mode="smart"] [data-chat-composer] [data-chat-composer-placeholder
 html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-fa {
   direction: rtl;
   text-align: right;
+  unicode-bidi: isolate; /* same reason as on .qrt-en, and this is the reported case */
 }
 
 /* A list whose items are all Latin flips wholesale. A mixed list does not: its markers
@@ -136,6 +145,19 @@ html[data-qrt-mode="force"] [data-user-bubble] [data-chat-message-text],
 html[data-qrt-mode="force"] [data-chat-composer] :is(textarea, [contenteditable="true"], [data-chat-composer-placeholder]) {
   direction: rtl !important;
   text-align: right !important;
+}
+
+/* Force mode carries the same trap as smart mode: with `unicode-bidi: plaintext` still on
+   the block, a `direction: rtl !important` pin moves the alignment and leaves the paragraph
+   level to the first strong character — so a Persian paragraph opening with a Latin name
+   read left-to-right under a switch whose entire job is to make everything RTL.
+   The composer is deliberately not in this list: per-line direction there is its own
+   measured design (see the note above the .qrt-en rule), and force mode never promised to
+   take it away. */
+html[data-qrt-mode="force"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
+html[data-qrt-mode="force"] [data-task-monitor-fixed-panel] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
+html[data-qrt-mode="force"] [data-user-bubble] [data-chat-message-text] {
+  unicode-bidi: isolate;
 }
 
 html[data-qrt-mode="off"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, td, th, figcaption, caption, summary),

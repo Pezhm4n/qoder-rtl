@@ -231,13 +231,14 @@ async function settingsTest() {
     var byId = function (id) { return document.getElementById(id); };
     var codeHeavy = byId("t-code-heavy"), codeOnly = byId("t-code-only"), bomLine = byId("t-bom");
     var userFa = byId("t-user-fa"), userEn = byId("t-user-en");
+    var ledLatin = byId("t-led-latin"), ledLong = byId("t-led-long");
     /* The two surfaces the owner's report turned out to be: the composer's editor and its
        ghost placeholder (RTL-pinned by the stylesheet, never classified), and the agent's
        task-monitor panel (not anchored anywhere, so untouched). */
     var monFa = byId("t-mon-fa"), monEn = byId("t-mon-en");
     var editor = document.querySelector("[data-chat-composer] [contenteditable]");
     var ghost = document.querySelector("[data-chat-composer] [data-chat-composer-placeholder]");
-    if (!p || !li || !liEn || !bq || !enOl || !mixedUl || !codeHeavy || !codeOnly || !bomLine || !userFa || !userEn || !monFa || !monEn || !editor || !ghost) {
+    if (!p || !li || !liEn || !bq || !enOl || !mixedUl || !codeHeavy || !codeOnly || !bomLine || !userFa || !userEn || !monFa || !monEn || !editor || !ghost || !ledLatin || !ledLong) {
       return JSON.stringify({ error: "fixture prose is missing" });
     }
     var restore = { rtl: api.config.rtl, mode: api.config.mode, lineHeight: api.config.lineHeight, codeSize: api.config.codeSize };
@@ -280,6 +281,47 @@ async function settingsTest() {
           };
         });
     };
+    /* Which way the words actually land, as opposed to what the cascade says. A block can
+       compute to direction:rtl and still be laid out left-to-right: unicode-bidi:plaintext
+       takes the paragraph's base level from its first strong character (UAX #9 rule P2) and
+       ignores direction for that decision, so a Persian sentence that opens with a Latin
+       name read LTR while every computed-style check stayed green.
+       The probe compares where the LEADING word and the TRAILING word of the block are
+       drawn — RTL base puts the leading one to the right of the trailing one. Two weaker
+       signals are reported but not asserted: hugs only reads the alignment (under the bug
+       text-align was already right, so it said "right" while the sentence still ran LTR),
+       and two adjacent Latin words prove nothing, since a run of Latin is one embedded LTR
+       sequence either way. No backticks or single backslashes in here: this body ships as a
+       template literal to Runtime.evaluate. */
+    var textNodes = function (el) {
+      var out = [];
+      for (var n = el.firstChild; n; n = n.nextSibling) if (n.nodeType === 3 && n.data.trim()) out.push(n);
+      return out;
+    };
+    var wordRect = function (node, re) {
+      var m = re.exec(node.data);
+      if (!m) return null;
+      var rg = document.createRange();
+      rg.setStart(node, m.index + (m[1] ? m[0].indexOf(m[1]) : 0));
+      rg.setEnd(node, m.index + (m[1] ? m[0].indexOf(m[1]) : 0) + m[1].length);
+      return { rect: rg.getBoundingClientRect(), word: m[1] };
+    };
+    var visualOrder = function (el) {
+      var nodes = textNodes(el);
+      if (!nodes.length) return { error: "no text in block" };
+      var head = wordRect(nodes[0], /^\\s*(\\S+)/);
+      var tail = wordRect(nodes[nodes.length - 1], /(\\S+)\\s*$/);
+      if (!head || !tail) return { error: "no words to place" };
+      var box = el.getBoundingClientRect();
+      return {
+        head: head.word,
+        tail: tail.word,
+        order: head.rect.left > tail.rect.left ? "rtl" : "ltr",
+        hugs: Math.abs(head.rect.right - box.right) < Math.abs(head.rect.left - box.left) ? "right" : "left",
+        ub: getComputedStyle(el).unicodeBidi,
+        dir: getComputedStyle(el).direction
+      };
+    };
     api.apply({ lineHeight: 2.3, rtl: true, mode: "smart" });
     var smart = {
       p: ratio(p),
@@ -306,6 +348,9 @@ async function settingsTest() {
       monFa: ratio(monFa),
       monEn: ratio(monEn),
       monStamp: { fa: monFa.hasAttribute("data-qrt-lead"), en: monEn.hasAttribute("data-qrt-lead") },
+      ledLatin: visualOrder(ledLatin),
+      ledLong: visualOrder(ledLong),
+      ledClass: { fa: /qrt-fa/.test(ledLatin.className), long: /qrt-fa/.test(ledLong.className) },
       mixedUl: getComputedStyle(mixedUl).direction,
       enOl: getComputedStyle(enOl).direction
     };
@@ -317,6 +362,7 @@ async function settingsTest() {
       userFa: ratio(userFa),
       monFa: ratio(monFa),
       ghost: ratio(ghost),
+      ledLatin: visualOrder(ledLatin),
       marks: document.querySelectorAll(".qrt-fa,.qrt-en").length,
       root: document.documentElement.getAttribute("data-qrt-mode")
     };
@@ -361,8 +407,10 @@ async function settingsTest() {
            paragraph inside <details> raised these from 4/5 to 6/7 (the caption and the
            table cells are deliberately not classified — the tables switch owns those),
            and Qoder's own human turn — two bubbles, one per language — raised them to 7/8,
-           and the task-monitor panel to 9/10; taking the block-level verdict off the composer box again made it 8/10. */
-        val.smart.fa === 8 &&
+           and the task-monitor panel to 9/10; taking the block-level verdict off the
+           composer box again made it 8/10, and the two Persian paragraphs that open with a
+           Latin name (the reported case) brought it back to 10/10. */
+        val.smart.fa === 10 &&
         val.smart.en === 10,
       JSON.stringify(val.smart)
     );
@@ -457,6 +505,26 @@ async function settingsTest() {
       "invisible format characters cannot outvote Latin text",
       val.smart.bomLine.dir === "ltr" && val.smart.bomLine.align === "left" && /qrt-en/.test(val.smart.bomLine.cls),
       JSON.stringify(val.smart.bomLine)
+    );
+    /* The reported defect («اصلا درست نوشته نشده فارسی»), and the one the README promises is
+       handled: a Persian block whose first word is Latin. The classifier's verdict was right
+       all along — .qrt-fa, direction rtl, text-align right — and the paragraph still read
+       left-to-right, because `unicode-bidi: plaintext` sets the base level from the first
+       strong character and `direction` is ignored for that. So this asserts geometry, and
+       asserts `ub` is no longer plaintext on a block that has a verdict of its own. */
+    check(
+      "a Persian paragraph that opens with a Latin name reads right-to-left",
+      val.smart.ledLatin.order === "rtl" &&
+        val.smart.ledLong.order === "rtl" &&
+        val.smart.ledLatin.ub !== "plaintext" &&
+        val.smart.ledClass.fa === true &&
+        val.smart.ledClass.long === true,
+      JSON.stringify({ short: val.smart.ledLatin, long: val.smart.ledLong })
+    );
+    check(
+      "turning direction off puts a Latin-led Persian paragraph back to LTR",
+      val.off.ledLatin.order === "ltr" && val.off.ledLatin.ub !== "plaintext",
+      JSON.stringify(val.off.ledLatin)
     );
     /* Only a list whose items are *all* Latin flips: a mixed list keeps its RTL
        markers and lets each item carry its own direction. */
