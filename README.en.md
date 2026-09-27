@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="./docs/images/qoder.webp" alt="Qoder logo" width="88" height="88">
+
 # Qoder Persian RTL
 
 **Read and write Persian and Arabic in the Qoder desktop chat — without touching a single installed file, without breaking auto-updates, and with Vazirmatn bundled offline.**
@@ -28,7 +30,7 @@ Qoder — like most Electron apps — takes text direction from the **interface 
 - **Code, terminals and file paths stay left-to-right** — even inside a fully Persian message, in the app's own monospace font.
 - **Vazirmatn ships inside the tool** and is registered from inlined bytes: no download, no font installed on your system, works offline. The font is registered through the `FontFace` API, so a strict `font-src` policy cannot block it.
 - **Your own messages follow the patch too**, not only the assistant's replies — the human turn is rendered differently by Qoder and needed its own rules.
-- **A floating settings panel** at the bottom-right of the window, plus `Alt+R` (direction) and `Alt+Shift+R` (show/hide the panel): chat text size, code font size, line height, RTL tables and reversed columns, and separate fonts for Persian / Latin / code.
+- **A floating settings panel** at the bottom-right of the window, plus `Alt+R` (direction) and `Alt+Shift+R` (show/hide the panel): chat text size, code font size, line height, RTL tables and reversed columns, and separate fonts for Persian / Latin / code — plus a "Star on GitHub" row pinned to the panel's bottom. With the panel closed it swallows nothing: clicks in its area reach Qoder itself.
 - **Nothing is written into the Qoder install.** The patch is injected into the running renderer over the DevTools protocol, so an automatic Qoder update cannot wipe it and no signed file is touched.
 
 <a id="scope"></a>
@@ -127,8 +129,8 @@ Because on Qoder 0.3.3 it bricked the app: `EnableEmbeddedAsarIntegrityValidatio
 <a id="verification"></a>
 ## Verification
 
-- `npm test` → **181** offline checks (payload shape, CLI behaviour and gates, staged-archive audit)
-- `npm run test:browser` → **64** end-to-end checks against headless Chromium, including real mouse and keyboard events and rendered-geometry measurements
+- `npm test` → **195** offline checks (payload shape, CLI behaviour and gates, README guards, staged-archive audit)
+- `npm run test:browser` → **68** end-to-end checks against headless Chromium, including real mouse and keyboard events, rendered-geometry measurements and a hit-test of the closed panel
 - `node cli.js check` → **15** lines on a real Qoder window
 
 Every new assertion is proven **red against the previous version** before it is trusted: a check that passes on broken code is not a check.

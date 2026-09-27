@@ -57,6 +57,32 @@ async function main() {
   check("@electron/asar is a dev dependency only", !pkg.dependencies?.["@electron/asar"] && !!pkg.devDependencies?.["@electron/asar"]);
   check("tests are not published", !pkg.files.some((f) => /test/.test(f)) && pkg.files.every((f) => fs.existsSync(path.join(ROOT, f))), JSON.stringify(pkg.files));
   check("main is the CDP engine, not the archive patcher", pkg.main === "live.js", String(pkg.main));
+  /* ---------- the READMEs are the storefront: nav anchors and pictures must resolve ----------
+     Both of these shipped broken once: an anchor wrapped in backticks renders as literal
+     `<a id="…">` text and its nav link jumps nowhere, and a picture the tarball does not
+     carry is a broken image on the npm page (npm renders the README from the package). */
+  const BT = String.fromCharCode(96);
+  const ships = (p) => pkg.files.some((f) => p === "./" + f || p.startsWith("./" + f + "/"));
+  for (const file of ["README.md", "README.en.md"]) {
+    const doc = read(file);
+    check(
+      `${file}: no nav anchor is fenced as code`,
+      (doc.match(new RegExp("^" + BT + "<a id=", "gm")) || []).length === 0,
+      (doc.match(new RegExp(".{0,12}" + BT + "<a id=.{0,24}", "g")) || []).slice(0, 2).join(" / ")
+    );
+    const targets = new Set((doc.match(/<a id="([^"]+)"><\/a>/g) || []).map((m) => /<a id="([^"]+)"/.exec(m)[1]));
+    const wanted = (doc.match(/\]\(#([^)]+)\)/g) || []).map((m) => m.slice(3, -1));
+    check(
+      `${file}: every in-page link lands on a real anchor`,
+      wanted.length >= 4 && wanted.every((w) => targets.has(w)),
+      JSON.stringify({ wanted, missing: wanted.filter((w) => !targets.has(w)) })
+    );
+    const local = [...doc.matchAll(/!\[[^\]]*\]\((\.\/[^)]+)\)/g), ...doc.matchAll(/<img[^>]+src="(\.\/[^"]+)"/g)].map((m) => m[1]);
+    const absent = local.filter((p) => !fs.existsSync(path.join(ROOT, p.slice(2))));
+    const unstored = local.filter((p) => !ships(p));
+    check(`${file}: every picture exists and is referenced by path`, local.length >= 3 && absent.length === 0, JSON.stringify({ local, absent }));
+    check(`${file}: every picture ships inside the npm tarball`, unstored.length === 0, JSON.stringify(unstored));
+  }
   /* "main" is also the require() entry, so a plain require must not open a CDP connection.
      If the engine still self-boots, the child never exits and the timeout kills it. */
   const bootProbe = runCli(["-e", `require(process.argv[1]); console.log("loaded");`, path.join(ROOT, "live.js")], { timeout: 15000 });
@@ -305,6 +331,36 @@ console.log(require(root + "/live.js").parseArgs([]).port);
   };
   check("the CDP engine reads the same environment default", enginePort("9444") === "9444", enginePort("9444"));
   check("the engine ignores a port it cannot use", enginePort("nonsense") === "9222", enginePort("nonsense"));
+
+  /* ---------- terminal colour: painted when asked, identity everywhere else ---------- */
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.FORCE_COLOR;
+  delete cleanEnv.NO_COLOR;
+  const paintRun = (env) =>
+    runCli(
+      [
+        "-e",
+        `const t = require(process.argv[1] + "/lib/term.js");
+process.stdout.write(t.ok("G") + t.bad("R") + t.warn("Y") + t.info("C") + t.key("K") + t.dim("D"));`,
+        ROOT
+      ],
+      { env: { ...cleanEnv, ...env } }
+    ).stdout;
+  const ESC = String.fromCharCode(27);
+  const painted = paintRun({ FORCE_COLOR: "1" });
+  check(
+    "FORCE_COLOR paints every role with its own code",
+    painted.includes(ESC + "[32mG" + ESC + "[0m") &&
+      painted.includes(ESC + "[31mR" + ESC + "[0m") &&
+      painted.includes(ESC + "[33mY" + ESC + "[0m") &&
+      painted.includes(ESC + "[36mC" + ESC + "[0m") &&
+      painted.includes(ESC + "[1mK" + ESC + "[0m") &&
+      painted.includes(ESC + "[90mD" + ESC + "[0m"),
+    JSON.stringify(painted)
+  );
+  const unpainted = paintRun({ NO_COLOR: "1" });
+  const piped = paintRun({});
+  check("a pipe and NO_COLOR both get the plain string back", unpainted === "GRYCKD" && piped === "GRYCKD", JSON.stringify({ unpainted, piped }));
   /* The precedence lives in one function: a second reader of the env var, or a second
      9222 literal, is how a status line and an engine end up on different ports. */
   const cliSrc = read("cli.js");

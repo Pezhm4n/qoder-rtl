@@ -2,7 +2,10 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.8.3";
+  var VERSION = "1.8.4";
+  /* Kept equal to package.json "repository" by a test in test/live.js; the payload has
+     no require(), so the link the panel's star button opens lives here as a literal. */
+  var REPO_URL = "https://github.com/Pezhm4n/qoder-rtl";
   var STORE_KEY = "qoder_persian_rtl_config_v1";
   if (typeof window === "undefined" || typeof document === "undefined") return;
   var previous = window.__QODER_RTL__;
@@ -609,6 +612,27 @@
     return svg;
   }
 
+  /* Octicons' mark-glyph, inlined so the star row needs no network and no font. */
+  var GITHUB_MARK =
+    "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49" +
+    "-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82" +
+    ".72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59" +
+    ".82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27" +
+    "c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95" +
+    ".29.25.54.73.51 1.36 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z";
+
+  function githubMark() {
+    var NS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("aria-hidden", "true");
+    var path = document.createElementNS(NS, "path");
+    path.setAttribute("fill-rule", "evenodd");
+    path.setAttribute("d", GITHUB_MARK);
+    svg.appendChild(path);
+    return svg;
+  }
+
   function buildPanel() {
     var trigger = el("button", "qrt-trigger");
     trigger.type = "button";
@@ -670,6 +694,18 @@
     foot.appendChild(hide);
     panel.appendChild(foot);
 
+    /* A real anchor, not a click handler: keyboard focus, middle-click and the app's
+       own external-link routing all come with it for free. */
+    var star = document.createElement("a");
+    star.className = "qrt-star";
+    star.href = REPO_URL;
+    star.target = "_blank";
+    star.rel = "noopener noreferrer";
+    star.appendChild(githubMark());
+    star.appendChild(el("span", "qrt-starlabel", "Star on GitHub"));
+    star.appendChild(el("span", "qrt-staricon", "★"));
+    panel.appendChild(star);
+
     var widget = el("div", "qrt-widget");
     widget.appendChild(trigger);
     widget.appendChild(panel);
@@ -714,12 +750,18 @@
        right edge; the RTL setting belongs to the panel's own text.
        right:52px clears Qoder's own help button — it is fixed at bottom-4.5/right-4.5
        and measures 28px, so it owns the last 46px of that corner; sitting on top of it
-       (our z-index is maximal) would swallow its clicks. */
+       (our z-index is maximal) would swallow its clicks.
+       pointer-events:none on the widget itself is the same lesson one level up: the
+       closed panel keeps its layout box (opacity hides, it does not remove), so the
+       flex column spans the whole invisible panel, and a container that accepts
+       pointer events would eat every click in that rectangle — the app behind it
+       becomes unclickable while nothing is visibly there. Only the two real controls
+       opt back in: the trigger always, the panel only while open. */
     ".qrt-widget{position:fixed;bottom:14px;right:52px;z-index:2147483600;display:flex;",
-    "flex-direction:column-reverse;align-items:flex-end;font-family:var(--qrt-stack);}",
+    "flex-direction:column-reverse;align-items:flex-end;font-family:var(--qrt-stack);pointer-events:none;}",
     ".qrt-trigger{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;",
     "justify-content:center;padding:0;border:1px solid rgba(127,127,127,.3);background:Canvas;",
-    "color:CanvasText;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.26);",
+    "color:CanvasText;cursor:pointer;pointer-events:auto;box-shadow:0 4px 14px rgba(0,0,0,.26);",
     "transition:transform .14s ease,background-color .16s ease,color .16s ease,border-color .16s ease;}",
     /* A 1px lift, not a bounce: the animation has to match a 34px target. */
     ".qrt-trigger:hover{border-color:Highlight;color:Highlight;transform:translateY(-1px);}",
@@ -753,7 +795,25 @@
     ".qrt-footer{display:flex;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(127,127,127,.22);}",
     ".qrt-footbtn{flex:1 1 auto;border:1px solid rgba(127,127,127,.26);background:rgba(127,127,127,.08);color:inherit;",
     "font:500 11px/1 var(--qrt-stack);padding:6px 8px;border-radius:8px;cursor:pointer;}",
-    ".qrt-footbtn:hover{background:rgba(127,127,127,.16);}"
+    ".qrt-footbtn:hover{background:rgba(127,127,127,.16);}",
+    /* The star row is the one deliberately branded pixel in the panel: an amber star on
+       a warm tint, LTR so "Star on GitHub" reads as written inside the RTL panel.
+       Sticky at the bottom of the scrollport because it is the last row: on a short
+       window the panel scrolls and an ordinary last row sits below the fold, unseen
+       and unclickable. The background is a tint layered over Canvas, not a translucent
+       tint alone, so scrolled rows cannot show through the pinned row. */
+    ".qrt-star{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:10px;",
+    "padding:7px 8px;border:1px solid rgba(227,160,8,.5);border-radius:9px;",
+    "background:linear-gradient(rgba(227,160,8,.12),rgba(227,160,8,.12)) Canvas;",
+    "color:inherit;text-decoration:none;direction:ltr;",
+    "position:sticky;bottom:0;font:600 11px/1 var(--qrt-stack);",
+    "transition:background-color .16s ease,border-color .16s ease,transform .14s ease;}",
+    ".qrt-star:hover{background:linear-gradient(rgba(227,160,8,.24),rgba(227,160,8,.24)) Canvas;",
+    "border-color:rgba(227,160,8,.8);transform:translateY(-1px);}",
+    ".qrt-star:active{transform:translateY(0);}",
+    ".qrt-star:focus-visible{outline:2px solid Highlight;outline-offset:2px;}",
+    ".qrt-star svg{width:14px;height:14px;flex:0 0 auto;fill:currentColor;opacity:.8;}",
+    ".qrt-staricon{color:#e3a008;font-size:13px;line-height:1;}"
   ].join("");
 
   /* --------------------------------------------------------------------- boot */

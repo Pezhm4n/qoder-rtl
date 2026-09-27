@@ -26,6 +26,7 @@ const { runtimeSource, probeSource, controlsProbeSource, diagnoseSource } = requ
 const { findInstall } = require("./lib/detect");
 const { stateRoot } = require("./lib/backup");
 const { launcherPaths: launcherPathsFor } = require("./lib/launcher");
+const term = require("./lib/term");
 
 const DEFAULT_PORT = defaultPort();
 const DEFAULT_WAIT = 30;
@@ -766,27 +767,27 @@ async function main() {
   if (!open && flags.start) {
     const qoder = qoderProcesses();
     if (qoder.error) {
-      console.log(`Cannot tell whether Qoder is running: ${qoder.error}`);
-      console.log("So this refuses to launch: Qoder enforces one instance per machine, and starting on");
-      console.log("top of a running copy hands off to it with the debug-port flag dropped.");
-      console.log("Either fix that probe, or start Qoder once from a launcher: node live.js --launcher");
+      console.log(term.bad(`Cannot tell whether Qoder is running: ${qoder.error}`));
+      console.log(term.dim("So this refuses to launch: Qoder enforces one instance per machine, and starting on"));
+      console.log(term.dim("top of a running copy hands off to it with the debug-port flag dropped."));
+      console.log(term.dim("Either fix that probe, or start Qoder once from a launcher: ") + term.info("node live.js --launcher"));
       process.exit(2);
     }
     if (qoder.pids.length) {
-      console.log(`Qoder is already running (${qoder.pids.length} processes) and enforces one instance per machine,`);
-      console.log("so a fresh launch hands off to it and the --remote-debugging-port flag is dropped.");
-      console.log("Fully quit Qoder first — its single-instance lock hands a fresh launch off to the");
-      console.log("running copy, which has no debug port. Nothing is killed here on purpose.");
+      console.log(term.bad(`Qoder is already running (${qoder.pids.length} processes) and enforces one instance per machine,`));
+      console.log(term.dim("so a fresh launch hands off to it and the --remote-debugging-port flag is dropped."));
+      console.log(term.dim("Fully quit Qoder first — its single-instance lock hands a fresh launch off to the"));
+      console.log(term.dim("running copy, which has no debug port. Nothing is killed here on purpose."));
       process.exit(2);
     }
     if (state.state !== "free") {
-      console.log(`Not launching: ${describePort(state)}`);
-      console.log("      " + adviceFor(state));
+      console.log(term.bad(`Not launching: ${describePort(state)}`));
+      console.log("      " + term.warn(adviceFor(state)));
       process.exit(2);
     }
     const exe = exePath();
     startedAt = Date.now();
-    console.log(`Launching ${exe} --remote-debugging-port=${flags.port}`);
+    console.log(`${term.key("Launching")} ${term.dim(exe)} ${term.info(`--remote-debugging-port=${flags.port}`)}`);
     const child = spawn(exe, [`--remote-debugging-port=${flags.port}`], { detached: true, stdio: "ignore" });
     child.unref();
     launched = true;
@@ -794,7 +795,7 @@ async function main() {
 
   if (!open && (launched || flags.wait > 0)) {
     waited = launched ? 60 : flags.wait;
-    console.log(`Waiting up to ${waited}s for the DevTools endpoint on 127.0.0.1:${flags.port}…`);
+    console.log(term.dim(`Waiting up to ${waited}s for the DevTools endpoint on`) + " " + term.info(`127.0.0.1:${flags.port}`) + term.dim("…"));
     open = await waitForPort(flags.port, waited * 1000);
   }
 
@@ -809,20 +810,20 @@ async function main() {
         ...portObservations(after, qoderProcesses(), devtoolsRecords(), startedAt),
         `      what to do:  ${adviceFor(after, true)}`
       ].join("\n");
-      console.log(text);
-      console.log("Verdict appended to " + writeVerdict(text));
+      console.log(term.report(text));
+      console.log(term.dim("Verdict appended to ") + term.info(writeVerdict(text)));
       process.exit(1);
     }
-    console.log(`Qoder's DevTools port ${flags.port} is not answering.`);
-    console.log(`      port now:  ${describePort(state)}`);
-    if (state.owner === "exited") console.log("      what to do:  " + adviceFor(state));
-    console.log("Either:  node live.js --launcher   →  quit Qoder  →  run Qoder-RTL.cmd");
-    console.log("or in one step (needs Qoder already quit):  node live.js --start --check");
+    console.log(term.bad(`Qoder's DevTools port ${flags.port} is not answering.`));
+    console.log(`      ${term.dim("port now:")}  ${describePort(state)}`);
+    if (state.owner === "exited") console.log("      " + term.dim("what to do:") + "  " + term.warn(adviceFor(state)));
+    console.log(term.dim("Either:  ") + term.info("node live.js --launcher") + term.dim("   →  quit Qoder  →  run Qoder-RTL.cmd"));
+    console.log(term.dim("or in one step (needs Qoder already quit):  ") + term.info("node live.js --start --check"));
     process.exit(2);
   }
 
   const endpoint = await browserEndpoint(flags.port);
-  console.log(`Connected: ${endpoint}`);
+  console.log(`${term.ok("Connected:")} ${term.info(endpoint)}`);
 
   if (flags.list) {
     const targets = await httpJson(flags.port, "/json/list");
@@ -836,19 +837,30 @@ async function main() {
     const rows = await runDiagnose(conn, flags);
     const text = `# diagnose port ${flags.port} — ${new Date().toISOString()}\n${JSON.stringify(rows, null, 2)}`;
     console.log(text);
-    console.log("\nReport appended to " + writeVerdict(text, "cdp-diagnose.log"));
+    console.log(term.dim("\nReport appended to ") + term.info(writeVerdict(text, "cdp-diagnose.log")));
     conn.close();
     return;
   }
 
   const injector = new Injector(conn, flags);
   await injector.start();
-  console.log(`Injected into ${injector.sessions.size} window(s).` + (injector.skipped.size ? ` ${injector.skipped.size} window(s) never answered the Page domain.` : ""));
+  console.log(
+    term.ok(`Injected into ${injector.sessions.size} window(s).`) +
+      (injector.skipped.size ? term.warn(` ${injector.skipped.size} window(s) never answered the Page domain.`) : "")
+  );
 
   if (!flags.check) {
-    console.log("Watching for new windows — leave this running (Ctrl+C to stop).");
-    console.log("The SVG button at the bottom-right of the chat opens the settings panel; Alt+R toggles RTL, Alt+Shift+R shows or hides that button.");
-    console.log("Something looks off?  node live.js --diagnose   (read-only)");
+    console.log(
+      term.dim("Watching for new windows — leave this running (") + term.key("Ctrl+C") + term.dim(" to stop).")
+    );
+    console.log(
+      term.dim("The SVG button at the bottom-right of the chat opens the settings panel; ") +
+        term.key("Alt+R") +
+        term.dim(" toggles RTL, ") +
+        term.key("Alt+Shift+R") +
+        term.dim(" shows or hides that button.")
+    );
+    console.log(term.dim("Something looks off?") + "  " + term.info("node live.js --diagnose") + "   " + term.dim("(read-only)"));
     const tick = setInterval(() => {
       /* Retry first, so a window whose document has now rendered is counted as the
          patched window it has become rather than as a permanent skip. */
@@ -876,13 +888,13 @@ async function main() {
   const reports = await injector.report({ withControls: true });
   const rows = verdictRows(reports);
   const text = formatReport(reports, rows, flags.port);
-  console.log(text);
-  console.log("Verdict appended to " + writeVerdict(text));
+  console.log(term.report(text));
+  console.log(term.dim("Verdict appended to ") + term.info(writeVerdict(text)));
   const failed = rows.filter((r) => r.pass === false);
   const unsure = rows.filter((r) => r.pass === null);
-  if (failed.length) console.log(`\nIncomplete: ${failed.map((f) => f.name).join(", ")}`);
-  else if (unsure.length) console.log(`\nPartly unverified: ${unsure.map((f) => f.name).join(", ")} — the rest passed.`);
-  else console.log("\nCDP route works: the debug port is honored and the patch reaches the chat DOM.");
+  if (failed.length) console.log(term.bad(`\nIncomplete: ${failed.map((f) => f.name).join(", ")}`));
+  else if (unsure.length) console.log(term.warn(`\nPartly unverified: ${unsure.map((f) => f.name).join(", ")} — the rest passed.`));
+  else console.log(term.ok("\nCDP route works: the debug port is honored and the patch reaches the chat DOM."));
   conn.close();
   process.exit(failed.length ? 1 : 0);
 }

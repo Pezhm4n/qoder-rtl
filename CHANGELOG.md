@@ -14,6 +14,40 @@ Two version numbers exist and they are **not** the same thing:
 Package 1.4.0 – 1.7.0 were never released: payloads 1.4.0–1.8.0 all shipped together in
 package 1.8.0.
 
+## [1.11.3] - 2026-09-27
+
+Payload **1.8.4**.
+
+### Fixed
+- **The closed settings panel no longer eats clicks in its own area.** The widget is a
+  fixed flex column that keeps the invisible (`opacity: 0`) panel in layout, so the
+  container rectangle spanned the whole hidden panel and swallowed every click inside
+  it — the app behind that corner was unclickable while nothing was on screen. The
+  widget now refuses pointer events; the trigger opts back in always, the panel only
+  while open. Proven by hit-testing (`elementFromPoint`) in the browser suite: closed,
+  the panel's centre resolves to the app; open, to the panel.
+
+### Added
+- **Colour in the terminal log.** The start banner, the watch hints and the
+  PASS/FAIL/UNSURE verdicts are painted with the usual console meanings (green =
+  worked, red = did not, yellow = unjudged, cyan = values, gray = hints, bold =
+  section names) by a new zero-dependency `lib/term.js`. A pipe, `NO_COLOR=1` or a
+  redirected file get the plain string; `FORCE_COLOR=1` forces colour. Log files
+  (`cdp-test.log`, `cdp-diagnose.log`) are always written plain.
+- **A "Star on GitHub" row at the bottom of the settings panel** — a real anchor to
+  the repository named in `package.json`, opened with `target="_blank"`. It is pinned to the
+  panel's bottom edge (`position: sticky`) because the panel scrolls: as the last row it sat
+  below the fold on a short window (measured: content 443 px in a 401 px scrollport).
+
+### Documentation
+- **The Qoder logo now heads both READMEs**, so it is obvious which app the tool is for.
+- **Every nav anchor in `README.md` was wrapped in backticks**, so GitHub printed the literal
+  text `<a id="install"></a>` and none of the nav links jumped anywhere. Four checks now guard
+  both READMEs: no fenced anchors, every `(#anchor)` resolves, and every referenced picture
+  exists and ships.
+- **The README pictures ship inside the npm tarball** (`docs/images` was absent from
+  `package.json` `files`, so the npm page rendered broken images): 175.8 kB → 280.0 kB, 22 files.
+
 ## [1.11.2] - 2026-09-26
 
 Payload unchanged (1.8.3). This is a fix to the audit itself.

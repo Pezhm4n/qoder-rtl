@@ -16,6 +16,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 const { Connection, browserEndpoint, portIsOpen } = require("../lib/cdp");
+const PKG = require("../package.json");
 
 const ROOT = path.join(__dirname, "..");
 const argvPort = process.argv.indexOf("--port");
@@ -130,6 +131,67 @@ async function interactionTest() {
     await click(200, 200);
     const dismissed = await read();
     check("clicking outside closes the panel again", dismissed.open === false && dismissed.inert === true, JSON.stringify(dismissed));
+    /* The closed panel keeps its layout box — opacity hides, it does not remove — so
+       its fixed container used to sit on top of the app's own corner and swallow every
+       click inside that rectangle while nothing was visibly there. Hit-testing is the
+       only honest probe for that: ask the renderer what is actually on top. Opening
+       goes through the real click, not a class toggle: setOpen also clears panel.inert,
+       and an inert subtree is excluded from hit-testing whatever its CSS says. */
+    const HIT = `(function () {
+      var w = document.querySelector(".qrt-widget"), t = document.querySelector(".qrt-trigger"), p = document.querySelector(".qrt-panel");
+      if (!w || !t || !p) return JSON.stringify({ missing: true });
+      var at = function (r) {
+        var el = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+        if (!el) return "none";
+        if (el === t || t.contains(el)) return "trigger";
+        if (el === p || p.contains(el)) return "panel";
+        if (el === w || w.contains(el)) return "widget";
+        return "app";
+      };
+      var star = p.querySelector("a.qrt-star");
+      var pr = p.getBoundingClientRect();
+      var sr = star ? star.getBoundingClientRect() : null;
+      return JSON.stringify({
+        open: w.classList.contains("qrt-open"),
+        panelArea: at(pr),
+        triggerArea: at(t.getBoundingClientRect()),
+        starArea: star ? at(sr) : "missing",
+        geo: sr
+          ? {
+              panel: [Math.round(pr.top), Math.round(pr.bottom)],
+              star: [Math.round(sr.top), Math.round(sr.bottom)],
+              scroll: [p.scrollTop, p.scrollHeight, p.clientHeight],
+              svg: (function () {
+                var g = star.querySelector("svg").getBoundingClientRect();
+                return [Math.round(g.width), Math.round(g.height)];
+              })()
+            }
+          : null,
+        star: star ? { href: star.getAttribute("href"), target: star.target, rel: star.rel } : null
+      });
+    })()`;
+    const closedHits = await evalJson(HIT);
+    await click(start.x, start.y);
+    const openHits = await evalJson(HIT);
+    await pressEscape();
+    const afterHits = await evalJson(HIT);
+    check(
+      "the closed panel's rectangle lets clicks through to the app",
+      !closedHits.missing && closedHits.panelArea === "app" && afterHits.panelArea === "app" && afterHits.open === false,
+      JSON.stringify({ closedHits, afterHits })
+    );
+    check("the trigger stays clickable while the panel is closed", closedHits.triggerArea === "trigger", JSON.stringify(closedHits));
+    check(
+      "the open panel takes clicks back inside its own rectangle",
+      openHits.open === true && openHits.panelArea === "panel" && openHits.starArea === "panel",
+      JSON.stringify(openHits)
+    );
+    const repoUrl = String(PKG.repository.url || PKG.repository).replace(/^git\+/, "").replace(/\.git$/, "");
+    check(
+      "the star button is a real link to the repository, opened outside",
+      closedHits.star && closedHits.star.href === repoUrl && closedHits.star.target === "_blank" && /noopener/.test(closedHits.star.rel || ""),
+      JSON.stringify({ star: closedHits.star, repoUrl })
+    );
     /* Hiding the widget while its panel is open used to leave the shell carrying the
        open class, so Alt+Shift+R brought the panel back already expanded. */
     await click(start.x, start.y);

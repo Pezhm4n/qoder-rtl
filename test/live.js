@@ -228,6 +228,38 @@ function main() {
     /codeShots\.length\s*\?[\s\S]{0,900}:\s*null/.test(livejs) && livejs.includes("no inline code rendered to measure"),
     (/const codeShots = [^\n]*/.exec(livejs) || [""])[0]);
 
+  /* ---- The widget is a fixed box that spans the invisible (opacity:0) panel, so the
+     container itself must refuse pointer events, or the app's own corner under the
+     closed panel stays unclickable while nothing is on screen. The two real controls
+     opt back in: the trigger always, the panel only while open. ---- */
+  check("the closed widget lets the app behind it receive clicks",
+    /\.qrt-widget\{[^}]*pointer-events:none;/.test(rtljs) &&
+      /\.qrt-trigger\{[^}]*pointer-events:auto;/.test(rtljs) &&
+      /\.qrt-widget\.qrt-open \.qrt-panel\{[^}]*pointer-events:auto;/.test(rtljs),
+    (rtljs.match(/\.qrt-widget\{[^\n]*/) || [""])[0]);
+  /* The star row is a real anchor, and its href must not drift from package.json. */
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
+  const repoUrl = String(pkg.repository.url || pkg.repository).replace(/^git\+/, "").replace(/\.git$/, "");
+  check("the star button links to the repository named in package.json",
+    rtljs.includes('var REPO_URL = "' + repoUrl + '";') &&
+      /star\.href = REPO_URL;/.test(rtljs) &&
+      /star\.target = "_blank";/.test(rtljs) &&
+      /noopener/.test((rtljs.match(/star\.rel = "[^"]*"/) || [""])[0]),
+    (rtljs.match(/var REPO_URL = [^\n]*/) || [""])[0]);
+  /* Colour is console-only: the verdict text that reaches cdp-test.log is the plain
+     one, and the painter collapses to the identity function off a terminal. */
+  const termjs = fs.readFileSync(path.join(__dirname, "..", "lib", "term.js"), "utf8");
+  check("the console paints the verdict but the log file stays plain",
+    livejs.includes("console.log(term.report(text))") &&
+      /writeVerdict\(text\)/.test(livejs) &&
+      !livejs.includes(String.fromCharCode(27)),
+    (livejs.match(/console\.log\(term\.report[^\n]*/) || [""])[0]);
+  check("the painter is off on a pipe and obeys NO_COLOR and FORCE_COLOR",
+    termjs.includes("process.env.NO_COLOR") &&
+      termjs.includes("process.env.FORCE_COLOR") &&
+      termjs.includes("process.stdout.isTTY"),
+    (termjs.match(/function enabled\(\)[^\n]*/) || [""])[0]);
+
   /* ---- batch 8: the human turn. Qoder renders your own message as one div with the text
        hanging directly on it — no `.markdown-body`, no `<p>` — so every rule that descended
        from `[data-chat-message-text]` walked past it and the classifier never saw it. The
