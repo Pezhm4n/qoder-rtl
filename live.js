@@ -580,11 +580,12 @@ function verdictRows(reports) {
               if (u.cls === "qrt-en") return u.direction === "ltr" && u.textAlign === "left";
               return false; /* an unmarked, RTL-pinned block is the defect itself */
             };
-            /* The editor is the one block that must NOT carry a verdict: it holds several hard
-               lines, and `unicode-bidi: plaintext` gives each of them its own direction. So it
-               is scored on the box staying RTL and isolated per line, not on a class. */
-            const editorOk = (u) => !u || (a.mode === "off" ? u.direction === "ltr" : u.direction === "rtl" && u.bidi === "plaintext" && !/qrt-(fa|en)/.test(u.cls || ""));
-            return one(a.monitorText) && one(a.composerGhost) && editorOk(a.composerEditor);
+            /* The editor is classified like every other block now: a Persian draft that opens
+               with an English identifier had its line laid out left-to-right under the per-line
+               `plaintext` rule, and the alternative — wrapping each hard line in its own span —
+               broke Enter and the caret inside Qoder's live editor (payload 1.8.7, reverted).
+               A mixed-language draft therefore aligns by the majority of the whole box. */
+            return one(a.monitorText) && one(a.composerGhost) && one(a.composerEditor);
           })
         : null,
       detail: surfaceShots.length
@@ -592,8 +593,7 @@ function verdictRows(reports) {
             .map((r) => {
               const a = r.applied;
               const fmt = (label, u) => (u ? `${label}=${u.cls || "UNMARKED"} ${u.direction}/${u.textAlign} stamp=${u.stamp || "none"}` : `${label}=absent`);
-              const e = a.composerEditor;
-              return [fmt("monitor", a.monitorText), fmt("ghost", a.composerGhost), e ? `editor=${e.direction}/${e.bidi === "plaintext" ? "per-line" : e.bidi}` : "editor=absent"].join(" ");
+              return [fmt("monitor", a.monitorText), fmt("ghost", a.composerGhost), fmt("editor", a.composerEditor)].join(" ");
             })
             .join(" | ")
         : answered.map((r) => `panel nodes=${r.hooks ? r.hooks.taskMonitor : "?"}, composer nodes=${r.hooks ? r.hooks.composer : "?"}`).join(" | ") || "—"

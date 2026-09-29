@@ -101,7 +101,13 @@ async function interactionTest() {
     if (!target) return check("settings button interaction test", false, "fixture target not found");
     const { sessionId } = await conn.send("Target.attachToTarget", { targetId: target.targetId, flatten: true });
     await conn.send("Runtime.enable", {}, sessionId);
-    const evalJson = async (expression) => JSON.parse((await conn.send("Runtime.evaluate", { expression, returnByValue: true }, sessionId)).result.value);
+    /* A page-side throw used to surface as `"undefined" is not valid JSON`, which sent the
+       reader looking at JSON.parse instead of at the line that broke. */
+    const evalJson = async (expression) => {
+      const r = await conn.send("Runtime.evaluate", { expression, returnByValue: true }, sessionId);
+      if (r.exceptionDetails) throw new Error("page threw: " + (((r.exceptionDetails || {}).exception || {}).description || r.exceptionDetails.text));
+      return JSON.parse(r.result.value);
+    };
     const read = () => evalJson(STATE);
     const move = (x, y) => conn.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" }, sessionId);
     const click = async (x, y) => {
@@ -263,21 +269,47 @@ async function settingsTest() {
         cls: el.className.replace(/text-sm|leading-6|text-text|my-0/g, "").trim()
       };
     };
-    /* Where each hard line of the composer actually lands inside its own box. A block-level
-       language verdict cannot express this: it decides for the whole input at once, which is
-       the regression the owner reported («one English letter flips everything»). */
+    /* Where each hard line of the composer actually lands inside its own box. The box now
+       carries one verdict, so this measures what the user sees per line: which edge it hugs,
+       and — for a line whose first word is Latin and whose rest is Persian — whether the
+       words still run right-to-left. unicode-bidi:plaintext used to decide each line from
+       its own first strong character, which is what made the Latin-led line read LTR. Regex
+       backslashes are doubled below: this body ships as a template literal. */
     var editorLines = function () {
-      var box = editor.getBoundingClientRect();
-      return [].slice.call(editor.childNodes)
-        .filter(function (n) { return n.nodeType === 3 && n.data.trim(); })
-        .map(function (n) {
-          var rg = document.createRange();
-          rg.selectNodeContents(n);
-          var r = rg.getBoundingClientRect();
+      var raw = "";
+      for (var n = editor.firstChild; n; n = n.nextSibling) {
+        if (n.nodeType === 3) raw += n.data;
+        else if (n.nodeType === 1 && n.tagName === "BR") raw += "\\n";
+      }
+      return raw
+        .split("\\n")
+        .filter(function (t) { return t.trim(); })
+        .map(function (t) {
+          var first = /^\\s*(\\S+)/.exec(t), last = /(\\S+)\\s*$/.exec(t);
+          var fr = null, lr = null, box = null;
+          var w = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null, null), node;
+          while ((node = w.nextNode())) {
+            /* Anchor on the whole line, not on a single word: «خط» starts two different lines
+               of the fixture, and searching by word measured the last word of the wrong one. */
+            var at = node.data.indexOf(t);
+            if (at < 0) continue;
+            var a = t.indexOf(first[1]);
+            var r1 = document.createRange();
+            r1.setStart(node, at + a);
+            r1.setEnd(node, at + a + first[1].length);
+            fr = r1.getBoundingClientRect();
+            var b = t.lastIndexOf(last[1]);
+            var r2 = document.createRange();
+            r2.setStart(node, at + b);
+            r2.setEnd(node, at + b + last[1].length);
+            lr = r2.getBoundingClientRect();
+            box = node.parentElement.getBoundingClientRect();
+            break;
+          }
           return {
-            txt: n.data.slice(0, 18),
-            hugs: Math.abs(r.right - box.right) < Math.abs(r.left - box.left) ? "right" : "left",
-            firstLastOrder: r.right > r.left ? "forward" : "reverse"
+            txt: t.slice(0, 18),
+            hugs: fr && box ? (Math.abs(fr.right - box.right) < Math.abs(fr.left - box.left) ? "right" : "left") : "?",
+            order: fr && lr && first[1] !== last[1] ? (fr.left > lr.left ? "rtl" : "ltr") : "n/a"
           };
         });
     };
@@ -439,7 +471,13 @@ async function settingsTest() {
     conn = await Connection.open(await browserEndpoint(PORT));
     const target = (await conn.send("Target.getTargets")).targetInfos.find((t) => t.type === "page" && /chat\.html$/.test(t.url));
     const { sessionId } = await conn.send("Target.attachToTarget", { targetId: target.targetId, flatten: true });
-    const evalJson = async (expression) => JSON.parse((await conn.send("Runtime.evaluate", { expression, returnByValue: true }, sessionId)).result.value);
+    /* A page-side throw used to surface as `"undefined" is not valid JSON`, which sent the
+       reader looking at JSON.parse instead of at the line that broke. */
+    const evalJson = async (expression) => {
+      const r = await conn.send("Runtime.evaluate", { expression, returnByValue: true }, sessionId);
+      if (r.exceptionDetails) throw new Error("page threw: " + (((r.exceptionDetails || {}).exception || {}).description || r.exceptionDetails.text));
+      return JSON.parse(r.result.value);
+    };
     const val = await evalJson(SRC);
     if (val.error) return check("runtime settings probe", false, val.error);
     const holds = (r, want) => r && Math.abs(r.lead / r.size - want) <= 0.06;
@@ -461,9 +499,10 @@ async function settingsTest() {
            table cells are deliberately not classified — the tables switch owns those),
            and Qoder's own human turn — two bubbles, one per language — raised them to 7/8,
            and the task-monitor panel to 9/10; taking the block-level verdict off the
-           composer box again made it 8/10, and the two Persian paragraphs that open with a
-           Latin name (the reported case) brought it back to 10/10. */
-        val.smart.fa === 10 &&
+           composer box again made it 8/10, the two Persian paragraphs that open with a Latin
+           name (the reported case) brought it back to 10/10, and giving the composer box its
+           own verdict — the fix for the same defect inside the input — made it 11/10. */
+        val.smart.fa === 11 &&
         val.smart.en === 10,
       JSON.stringify(val.smart)
     );
@@ -493,25 +532,30 @@ async function settingsTest() {
        placeholder are RTL-pinned by the stylesheet but were never classified, so an English
        placeholder sat right-aligned with its ellipsis on the wrong side — and that placeholder
        only appears while a run is going on, which is what made it look streaming-specific. */
-    /* The composer is one box holding several lines, so a block-level verdict can only be
-       wrong for some of them — measured on the previous payload: a single Latin letter in an
-       otherwise empty input flipped the whole box to ltr/left. `unicode-bidi: plaintext`
-       already gives every hard line its own base direction, which is what the two checks
-       below measure — the box's class, and where each line actually lands. */
+    /* The composer is one box holding several lines, and it is now judged as one block by the
+       same ratio rule as the prose: the objection that used to rule that out — one Latin
+       letter flipping a Persian input — belonged to the old first-letter rule, not to this
+       classifier. What a box verdict genuinely cannot do is give two lines two directions;
+       wrapping each line in a span was tried for that and broke Enter and the caret in the
+       live app (payload 1.8.7, reverted). So the honest claim is narrower: the box follows
+       its own text, and every line inside it reads in that direction. */
     check(
-      "the composer box stays one RTL block with no language verdict of its own",
-      !/qrt-(fa|en)/.test(val.smart.editor.cls) &&
+      "the composer box carries its own verdict",
+      /qrt-fa/.test(val.smart.editor.cls) &&
         val.smart.editor.dir === "rtl" &&
         val.smart.editor.align === "right" &&
-        val.smart.editor.ub === "plaintext",
+        val.smart.editor.ub === "isolate",
       JSON.stringify(val.smart.editor)
     );
     check(
-      "each line of the composer keeps its own direction",
-      val.smart.editorLines.length === 3 &&
-        val.smart.editorLines[0].hugs === "right" &&
-        val.smart.editorLines[1].hugs === "left" &&
-        val.smart.editorLines[2].hugs === "right",
+      "every line of a Persian draft reads right-to-left, including one that opens with Latin",
+      val.smart.editorLines.length === 4 &&
+        val.smart.editorLines.every(function (l) { return l.hugs === "right"; }) &&
+        val.smart.editorLines[2].txt.indexOf("asdsadsa") === 0 &&
+        val.smart.editorLines[2].order === "rtl" &&
+        /* An English run inside the RTL box still reads left-to-right — that is correct bidi
+           embedding, and it is what the box verdict buys without touching the DOM. */
+        val.smart.editorLines[1].order === "ltr",
       JSON.stringify(val.smart.editorLines)
     );
     check(
@@ -737,7 +781,13 @@ async function controlTest() {
     conn = await Connection.open(await browserEndpoint(PORT));
     const target = (await conn.send("Target.getTargets")).targetInfos.find((t) => t.type === "page" && /chat\.html$/.test(t.url));
     const { sessionId } = await conn.send("Target.attachToTarget", { targetId: target.targetId, flatten: true });
-    const evalJson = async (expression) => JSON.parse((await conn.send("Runtime.evaluate", { expression, returnByValue: true }, sessionId)).result.value);
+    /* A page-side throw used to surface as `"undefined" is not valid JSON`, which sent the
+       reader looking at JSON.parse instead of at the line that broke. */
+    const evalJson = async (expression) => {
+      const r = await conn.send("Runtime.evaluate", { expression, returnByValue: true }, sessionId);
+      if (r.exceptionDetails) throw new Error("page threw: " + (((r.exceptionDetails || {}).exception || {}).description || r.exceptionDetails.text));
+      return JSON.parse(r.result.value);
+    };
     const r = await evalJson(SRC);
     if (r.error) return check("direction control probe", false, r.error);
     check("switch off turns the page LTR", r.off.root === "off" && r.off.dir === "ltr" && r.off.checked === false && r.off.marks === 0, JSON.stringify(r.off));
@@ -834,7 +884,13 @@ async function geometryTest() {
     conn = await Connection.open(await browserEndpoint(PORT));
     const target = (await conn.send("Target.getTargets")).targetInfos.find((t) => t.type === "page" && /chat\.html$/.test(t.url));
     const { sessionId } = await conn.send("Target.attachToTarget", { targetId: target.targetId, flatten: true });
-    const evalJson = async (expression) => JSON.parse((await conn.send("Runtime.evaluate", { expression, returnByValue: true }, sessionId)).result.value);
+    /* A page-side throw used to surface as `"undefined" is not valid JSON`, which sent the
+       reader looking at JSON.parse instead of at the line that broke. */
+    const evalJson = async (expression) => {
+      const r = await conn.send("Runtime.evaluate", { expression, returnByValue: true }, sessionId);
+      if (r.exceptionDetails) throw new Error("page threw: " + (((r.exceptionDetails || {}).exception || {}).description || r.exceptionDetails.text));
+      return JSON.parse(r.result.value);
+    };
     const val = await evalJson(SRC);
     if (val.error) return check("geometry probe", false, val.error);
     const ratio = (m) => (m ? m.lead / m.size : 0);
@@ -849,20 +905,20 @@ async function geometryTest() {
       JSON.stringify({ plain: val.plain.cell, reversed: val.reversed.cell })
     );
     /* What has to agree between the ghost text and the editor under it is the *type*, not the
-       direction. The placeholder is its own string — measured on the live window as the Latin
-       «Continue this task…» over a Persian editor — so in smart mode each surface now carries
-       its own verdict, and the batch-9 defect was precisely that both were RTL-pinned with
-       nothing to classify either. A regression back to the app's font or its own leading still
-       fails this check, which is what it was written for. */
+       direction. Each surface is one string and carries its own verdict: measured on the live
+       window as the Latin «Continue this task…» over a Persian editor. The editor used to be
+       demanded unclassified here; it is classified now, so the assertion is that both surfaces
+       agree on type and each carries the verdict its own text earned. A regression back to the
+       app's font or its own leading still fails this check, which is what it was written for. */
     check(
-      "the composer placeholder shares the editor's type and gets its own direction",
+      "the composer placeholder shares the editor's type and each carries its own verdict",
       /Vazirmatn/.test(val.plain.ghost.face) &&
         Math.abs(ratio(val.plain.ghost) - 2.1) <= 0.06 &&
         Math.abs(ratio(val.plain.ghost) - ratio(val.plain.editor)) <= 0.06 &&
         val.plain.ghost.dir === "ltr" &&
         /qrt-en/.test(val.plain.ghost.cls) &&
         val.plain.editor.dir === "rtl" &&
-        !/qrt-(fa|en)/.test(val.plain.editor.cls),
+        /qrt-fa/.test(val.plain.editor.cls),
       JSON.stringify({ ghost: val.plain.ghost, editor: val.plain.editor })
     );
 

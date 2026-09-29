@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "1.8.6";
+  var VERSION = "1.8.8";
   /* Kept equal to package.json "repository" by a test in test/live.js; the payload has
      no require(), so the link the panel's star button opens lives here as a literal. */
   var REPO_URL = "https://github.com/Pezhm4n/qoder-rtl";
@@ -59,11 +59,17 @@
     "[data-user-bubble] [data-chat-message-text]" /* the human turn: text on the container */,
     /* The composer's ghost placeholder is one string, so it gets one verdict like any other
        block: measured on the live window, the Latin «Continue this task…» sat right-aligned
-       with its ellipsis on the wrong side. The *editor* is deliberately NOT here — it holds
-       several hard lines, and a block-level verdict on it flipped the whole input to LTR over
-       a single Latin letter. The base rule leaves it `rtl` + `unicode-bidi: plaintext`, which
-       decides each line from that line's own text. `textarea` is absent for a different
-       reason: it is in CODE_ANCHOR, so markBlocks() skips it, and its text is `.value`. */
+       with its ellipsis on the wrong side. The *editor* is here too, and was not always: the
+       first reason to exclude it — a block verdict flipping a Persian input over one Latin
+       letter — is a property of the old first-letter rule, not of the ratio rule. Measured
+       against the current classifier, "سلام x" stays RTL, a lone "a" stays LTR, and a pasted
+       terminal log stays LTR. What a box verdict genuinely cannot do is give two lines of one
+       input two different directions; wrapping each line in its own span was tried for that
+       (payload 1.8.7) and broke Enter and the caret inside Qoder's live editor, so the box
+       verdict is the shipped behaviour and the mixed-language draft aligns by majority.
+       `textarea` is absent for a different reason: it is in CODE_ANCHOR, so markBlocks()
+       skips it, and its text is `.value`. */
+    "[data-chat-composer] [contenteditable]",
     "[data-chat-composer] [data-chat-composer-placeholder]",
     /* The agent's task-monitor / recap panel: Persian prose that lives outside every chat
        hook, is filled while a run is going on and collapses when it ends. */

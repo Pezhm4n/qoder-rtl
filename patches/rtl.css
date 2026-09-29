@@ -106,11 +106,13 @@
    right-aligned with no class to argue with), and test/live.js checks that invariant. */
 html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-en,
 html[data-qrt-mode="smart"] [data-task-monitor-fixed-panel] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-en,
-/* Only the ghost text is judged as one block: it is one string. The editor under it holds
-   several hard lines and keeps `unicode-bidi: plaintext` from the base rule, so each line
-   takes its direction from that line — a verdict on the whole editor made one Latin letter
-   flip a Persian input to left-alignment (measured, and the reason this line is not here). */
-html[data-qrt-mode="smart"] [data-chat-composer] [data-chat-composer-placeholder].qrt-en,
+/* The ghost text and the editor under it are each judged as one block: both hold one
+   string, and the verdict is the ratio of that string, not its first letter. The editor is
+   in this list on purpose — a Persian draft that opens with an English identifier reads
+   right-to-left — and it costs a mixed-language draft, which now aligns by majority. Giving
+   two lines of one input two directions was tried by wrapping each line in a span (payload
+   1.8.7) and broke Enter and the caret inside Qoder's live editor; it is reverted. */
+html[data-qrt-mode="smart"] [data-chat-composer] :is([contenteditable="true"], [data-chat-composer-placeholder]).qrt-en,
 html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-en {
   direction: ltr;
   text-align: left;
@@ -126,7 +128,7 @@ html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-en {
 
 html[data-qrt-mode="smart"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-fa,
 html[data-qrt-mode="smart"] [data-task-monitor-fixed-panel] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt, figcaption, summary).qrt-fa,
-html[data-qrt-mode="smart"] [data-chat-composer] [data-chat-composer-placeholder].qrt-fa,
+html[data-qrt-mode="smart"] [data-chat-composer] :is([contenteditable="true"], [data-chat-composer-placeholder]).qrt-fa,
 html[data-qrt-mode="smart"] [data-user-bubble] [data-chat-message-text].qrt-fa {
   direction: rtl;
   text-align: right;
@@ -154,13 +156,13 @@ html[data-qrt-mode="force"] [data-chat-composer] :is(textarea, [contenteditable=
 /* Force mode carries the same trap as smart mode: with `unicode-bidi: plaintext` still on
    the block, a `direction: rtl !important` pin moves the alignment and leaves the paragraph
    level to the first strong character — so a Persian paragraph opening with a Latin name
-   read left-to-right under a switch whose entire job is to make everything RTL.
-   The composer is deliberately not in this list: per-line direction there is its own
-   measured design (see the note above the .qrt-en rule), and force mode never promised to
-   take it away. */
+   read left-to-right under a switch whose entire job is to make everything RTL. The composer
+   belongs here too now that smart mode judges it as one box: «همیشه راست» means the input
+   follows as well. */
 html[data-qrt-mode="force"] [data-chat-message-text] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
 html[data-qrt-mode="force"] [data-task-monitor-fixed-panel] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6, dd, dt),
-html[data-qrt-mode="force"] [data-user-bubble] [data-chat-message-text] {
+html[data-qrt-mode="force"] [data-user-bubble] [data-chat-message-text],
+html[data-qrt-mode="force"] [data-chat-composer] :is([contenteditable="true"], [data-chat-composer-placeholder]) {
   unicode-bidi: isolate;
 }
 

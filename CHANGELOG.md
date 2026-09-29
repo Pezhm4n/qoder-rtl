@@ -16,10 +16,29 @@ package 1.8.0.
 
 ## [1.11.6] - 2026-09-27
 
-Payload unchanged (1.8.6). Nothing in the patch itself moved — this release is about the
-storefront and the tarball.
+Payload **1.8.8**. (1.8.7 was built, injected and reverted the same day — see the first
+entry. The number is not reused so no window can hold a payload whose content differs from
+what the version claims.)
 
 ### Fixed
+- **A Persian draft in the chat input that opens with an English word is now right-aligned.**
+  Reported with a screenshot: the Latin-led lines stayed on the left edge although the
+  sentences were Persian. The composer was the one RTL-pinned block the classifier never
+  saw, because it holds several hard lines and the old objection was that a box verdict
+  "flips the whole input over one Latin letter" — a property of the first-letter rule, not of
+  the ratio classifier now in use (measured: `سلام x` → RTL, a lone `a` → LTR, a pasted
+  terminal log → LTR). The editor is classified like any other block, and `unicode-bidi:
+  isolate` on its verdict hands the paragraph level back to `direction`.
+  - **Deliberate limit:** the verdict is for the whole box, so a draft holding a Persian line
+    and an English line aligns both by majority. An English phrase inside Persian text still
+    reads left-to-right, which is correct bidi embedding.
+  - **What was tried and reverted (payload 1.8.7):** giving each hard line its own verdict by
+    wrapping every line in a `display:block` span, with the newline kept in a `display:none`
+    twin so Qoder's `readEditorText` still round-tripped the string. It passed 74 checks
+    against the fixture and then broke the live app: Enter duplicated the previous line and
+    the text jumped side to side while typing. The fixture is not the app — its editor is
+    inert, while Qoder's `RichEditor` re-renders the box from its own model on input. Foreign
+    nodes inside that editor are out of scope for this tool.
 - **The npm page can show the screenshots again while the package stays lean.** 1.11.5
   dropped `docs/images` from `files`, but both READMEs still addressed the pictures as
   `./docs/images/…` — a path the npm page cannot follow, because it can only render what

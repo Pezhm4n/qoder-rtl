@@ -30,7 +30,7 @@ Qoder — like most Electron apps — takes text direction from the **interface 
 ## Features
 
 - **Per-block direction, decided by the text itself.** A Persian sentence that happens to start with a Latin identifier stays right-aligned. Force-RTL and off modes are both available.
-- **Inside the composer, every line keeps its own direction.** One English word in a Persian message does not left-align the whole input — that line goes left, the rest stays right. Measured from per-line geometry, not from a computed style.
+- **The composer follows the language of what you typed, like every other block.** A Persian message that opens with a Latin identifier stays right-aligned, an English draft stays left, and an English phrase inside Persian text still reads left-to-right on its own. Deliberate limit: the verdict belongs to the whole box, so a draft holding one Persian line and one English line aligns both by majority — giving each line its own direction was built (wrapping every hard line in a span) and reverted, because it broke Enter and the caret inside Qoder's live editor.
 - **Code, terminals and file paths stay left-to-right** — even inside a fully Persian message, in the app's own monospace font.
 - **Vazirmatn ships inside the tool** and is registered from inlined bytes: no download, no font installed on your system, works offline. The font is registered through the `FontFace` API, so a strict `font-src` policy cannot block it.
 - **Your own messages follow the patch too**, not only the assistant's replies — the human turn is rendered differently by Qoder and needed its own rules.

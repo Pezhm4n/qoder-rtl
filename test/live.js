@@ -359,19 +359,19 @@ function main() {
   check("the panel's prose is stamped for leading, not only given a direction",
     baseTags.filter((t) => /p|li|dd|dt|blockquote|figcaption|summary/.test(t)).every((t) => leadList.includes(`"${MON} ${t}"`)),
     leadList.includes(`"${MON} p"`) ? "panel p in LEAD_SELECTOR" : "panel p missing from LEAD_SELECTOR");
-  /* The composer's ghost placeholder is one string, so it gets one verdict — measured on the
-     live window as the Latin «Continue this task…» sitting right-aligned with its ellipsis on
-     the wrong side. The *editor* is deliberately not classified: it holds several hard lines,
-     and a block-level verdict flipped the whole input to LTR over one Latin letter. The base
-     rule keeps it `rtl` + `unicode-bidi: plaintext`, which decides per line instead. */
-  check("the composer placeholder gets a verdict and the editor keeps per-line plaintext",
+  /* The composer's ghost placeholder and the editor under it are each one string, so each
+     gets one verdict. The editor used to be excluded: the objection was that a block verdict
+     flipped a Persian input to LTR over one Latin letter, but that is a property of the old
+     first-letter rule, not of the ratio classifier now in use. The alternative — wrapping
+     every hard line in its own span — was built (payload 1.8.7), broke Enter and the caret in
+     Qoder's live editor, and was reverted. So the editor is classified, and a mixed-language
+     draft aligns by the majority of the box. */
+  check("the composer placeholder and the editor both get a verdict",
     blockList.includes('"[data-chat-composer] [data-chat-composer-placeholder]"') &&
-      !blockList.includes('"[data-chat-composer] [contenteditable]"') &&
-      /html\[data-qrt-mode="smart"\] \[data-chat-composer\] \[data-chat-composer-placeholder\]\.qrt-en/.test(css) &&
-      /html\[data-qrt-mode="smart"\] \[data-chat-composer\] \[data-chat-composer-placeholder\]\.qrt-fa/.test(css) &&
-      !/html\[data-qrt-mode="smart"\] \[data-chat-composer\] :is\(\[contenteditable="true"\], \[data-chat-composer-placeholder\]\)\.qrt-en/.test(css) &&
-      /\[data-chat-composer\] :is\(textarea, \[contenteditable="true"\], \[data-chat-composer-placeholder\]\) \{\s*unicode-bidi: plaintext;/.test(css),
-    JSON.stringify({ editorInBlockList: blockList.includes('"[data-chat-composer] [contenteditable]"'), smartGhost: /\[data-chat-composer\] \[data-chat-composer-placeholder\]\.qrt-en/.test(css) }));
+      blockList.includes('"[data-chat-composer] [contenteditable]"') &&
+      /html\[data-qrt-mode="smart"\] \[data-chat-composer\] :is\(\[contenteditable="true"\], \[data-chat-composer-placeholder\]\)\.qrt-en/.test(css) &&
+      /html\[data-qrt-mode="smart"\] \[data-chat-composer\] :is\(\[contenteditable="true"\], \[data-chat-composer-placeholder\]\)\.qrt-fa/.test(css),
+    JSON.stringify({ editorInBlockList: blockList.includes('"[data-chat-composer] [contenteditable]"'), smartEditor: /:is\(\[contenteditable="true"\], \[data-chat-composer-placeholder\]\)\.qrt-fa/.test(css) }));
   check("the verdict measures the panel and the placeholder instead of assuming them",
     probe.includes("monitorText: monitor") && /var monitor = readSurface\(/.test(probe) &&
       probe.includes('taskMonitor: count("[data-task-monitor-fixed-panel]")') && /var ghost = readSurface\(/.test(probe),
@@ -379,12 +379,13 @@ function main() {
   check("the new row refuses to pass on a window that rendered neither surface",
     /surfaceShots\.length\s*\?[\s\S]{0,1800}:\s*null/.test(livejs) && livejs.includes("not rendered to measure"),
     (/const surfaceShots = [^\n]*/.exec(livejs) || [""])[0]);
-  /* The row must not ask the editor for a class — that demand is what made a single Latin
-     letter flip the whole input. It asks for an RTL box with per-line plaintext instead. */
-  check("the row scores the editor on per-line plaintext rather than on a verdict",
-    /editorOk\(a\.composerEditor\)/.test(livejs) && /bidi === "plaintext"/.test(livejs) &&
-      !/one\(a\.composerEditor\)/.test(livejs) && probe.includes("bidi: s.unicodeBidi"),
-    JSON.stringify({ editorOk: /editorOk\(a\.composerEditor\)/.test(livejs), bidiInProbe: probe.includes("bidi: s.unicodeBidi") }));
+  /* The row must score the editor the way it scores every other classified block: on its own
+     verdict. The old row demanded `plaintext` per line and refused to look at a class, which
+     is precisely what let a Latin-led Persian line read left-to-right. */
+  check("the row scores the editor on its own verdict, not on per-line plaintext",
+    /one\(a\.composerEditor\)/.test(livejs) && !/editorOk\(a\.composerEditor\)/.test(livejs) &&
+      !/bidi === "plaintext"/.test(livejs) && probe.includes("bidi: s.unicodeBidi"),
+    JSON.stringify({ scoredByVerdict: /one\(a\.composerEditor\)/.test(livejs), oldEditorOk: /editorOk\(a\.composerEditor\)/.test(livejs) }));
   /* And the fixture has to keep containing the surfaces, or these rows quietly degrade to
      "never measured" forever — the exact blind spot that hid the batch-8 defect. */
   const fixture = fs.readFileSync(path.join(__dirname, "fixtures", "chat.html"), "utf8");
