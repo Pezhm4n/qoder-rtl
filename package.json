@@ -1,6 +1,6 @@
 {
   "name": "qoder-rtl",
-  "version": "1.11.6",
+  "version": "1.11.7",
   "description": "Persian/Arabic RTL + Vazirmatn for the Qoder desktop app: CDP live injection by default (no install files touched), archive patch kept behind an explicit command",
   "keywords": [
     "qoder",

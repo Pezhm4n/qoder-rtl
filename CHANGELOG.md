@@ -14,11 +14,14 @@ Two version numbers exist and they are **not** the same thing:
 Package 1.4.0 – 1.7.0 were never released: payloads 1.4.0–1.8.0 all shipped together in
 package 1.8.0.
 
-## [1.11.6] - 2026-09-27
+## [1.11.7] - 2026-09-29
 
-Payload **1.8.8**. (1.8.7 was built, injected and reverted the same day — see the first
-entry. The number is not reused so no window can hold a payload whose content differs from
-what the version claims.)
+Payload **1.8.8**. (1.8.7 was built, injected and reverted the same day — see the first entry.
+The number is not reused, so no window can hold a payload whose content differs from what its
+version claims.)
+
+1.11.6 went out while this fix was still being reviewed, so the composer verdict ships as its
+own release rather than being retro-fitted into a version the registry already has.
 
 ### Fixed
 - **A Persian draft in the chat input that opens with an English word is now right-aligned.**
@@ -39,6 +42,16 @@ what the version claims.)
     the text jumped side to side while typing. The fixture is not the app — its editor is
     inert, while Qoder's `RichEditor` re-renders the box from its own model on input. Foreign
     nodes inside that editor are out of scope for this tool.
+- **The browser harness stopped swallowing page-side exceptions.** `evalJson` turned a throw
+  inside the page into `"undefined" is not valid JSON`, which sent the reader to JSON.parse
+  instead of to the line that broke; it hid two real defects during this batch. It now
+  rethrows what the page reported.
+
+## [1.11.6] - 2026-09-27
+
+Payload unchanged (1.8.6).
+
+### Fixed
 - **The npm page can show the screenshots again while the package stays lean.** 1.11.5
   dropped `docs/images` from `files`, but both READMEs still addressed the pictures as
   `./docs/images/…` — a path the npm page cannot follow, because it can only render what
